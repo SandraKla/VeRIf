@@ -54,16 +54,30 @@ if ("shinydashboard" %in% rownames(installed.packages())) {
     library(shinydashboard)}
 
 dataset_original <- reflimR::livertests
-text <- HTML(paste0(
-  "This Shiny App is based on the packages reflimR and refineR for the estimation and verification 
-  of reference limits from routine laboratory results:"))
-
-text_refineR <- HTML(paste0(
+text1 <- HTML(paste0(
+  "This Shiny App is based on the package ", a("reflimR", href = "https://cran.r-project.org/web/packages/reflimR/index.html"), 
+  " for the estimation of reference limits from routine laboratory results:", br(), br(), 
+  "These columns should be used for new data: Category: Name of the category to filter the data, Age: Age in years, Sex: m for male and f for female,
+  Value: Column name is the analyte name, values are the laboratory measures. The data from livertests serves as a template. 
+  To load new data, the data should be in CSV format with values separated by semicolons (;), and decimal numbers should use a comma (,) as the decimal separator. 
+  The first row should contain column headers.", br(), br(),
+  "On the left side, the sidebar allows you to select the laboratory parameter, category, age and gender group. 
+  In the “Target Values” section, you can load target values from targetvalues, load reference intervals estimated with refineR, or manually enter custom values."
+))
+text2<- HTML(paste0(
+  "These tab displays the corresponding plot and the outputs of the reflim() function, providing an estimation of new reference intervals or a verification of the selected target values. 
+  By clicking “Visualization of all plots across every process step”, all plots generated throughout the workflow can be displayed."
+))
+text3<- HTML(paste0(
   "If, during the verification with reflimR and its target values or own target values, a yellow or red bar appears, 
   a follow-up analysis using refineR is recommended. The resulting reference intervals from refineR can be used as new target values
   and re-verified with reflimR. If all indicators turn green, this suggests that the manufacturer’s target values are likely incorrect. 
   If one or more indicators remain yellow or red, the data are considered too challenging for indirect methods. This assumption can be further 
-  evaluated in the “mclust” tab using a Gaussian mixture model (mclust)."))
+  evaluated in the “mclust” tab using a Gaussian mixture model (mclust)."
+))
+text4 <- HTML(paste0(
+  "Gaussian mixture modelling for the verification of reference intervals."
+))
 
 ####################################### User Interface ############################################
 
@@ -147,7 +161,7 @@ ui <- dashboardPage(
                    width = 7,
                    solidHeader = TRUE,
                    
-                   p(text),
+                   p(text1),
                    
                    uiOutput("dataset_file"),
                    actionButton('reset', 'Reset Input', icon = icon("trash")), hr(),
@@ -174,7 +188,7 @@ ui <- dashboardPage(
                    solidHeader = TRUE,
                    status = "info",
                    
-                   p(text),
+                   p(text2),
                    checkboxInput("check_plot.all", "Visualization of all plots across every process step"),
                    plotOutput("plot", height = "700px")
                  )
@@ -231,8 +245,7 @@ ui <- dashboardPage(
                     width = 7,
                     solidHeader = TRUE,
                     
-                    p(text),
-                    p(text_refineR),
+                    p(text3),
                     #actionButton('calculate', 'Calculate RI with refineR', icon = icon("calculator")),
                     plotOutput("plotrefineR", height = "700px"),
                     DT::dataTableOutput("table_report_refineR")
@@ -248,7 +261,7 @@ ui <- dashboardPage(
                     width = 7,
                     solidHeader = TRUE,
                     
-                    p(text),
+                    p(text4),
                     plotOutput("plotmclust", height = "700px"),
                   )
         )
