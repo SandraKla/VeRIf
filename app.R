@@ -96,13 +96,6 @@ ui <- dashboardPage(
     sidebarMenu(
       id = "sidebarid",
       
-      div(
-        style = "text-align:center",
-        br(),
-        "Verification of reference limits", br(),
-        "from routine laboratory results", hr()
-      ),
-      
       uiOutput("parameters"),
       uiOutput("category"),
       
@@ -119,12 +112,37 @@ ui <- dashboardPage(
         max = 100,
         value = c(0, 100)),
       
+      hr(),
+      
       numericInput(
         "nmin",
         "Select n.min:",
         200,
         min = 40,
         max = 1000
+      ),
+      
+      radioButtons(
+        "lambda_type",
+        "Select lambda source:",
+        choices = c(
+          "Lambda from reflimR" = "reflimR",
+          "Lambda from refineR" = "refineR",
+          "User defined lambda" = "user"
+        ),
+        selected = "reflimR"
+      ),
+
+      conditionalPanel(
+        condition = "input.lambda_type == 'user'",
+        sliderInput(
+          "lambda",
+          "Select lambda for VeRUS:",
+          min = 0,
+          max = 1,
+          value = 0.5,
+          step = 0.01
+        )
       ),
       
       hr(),
@@ -164,10 +182,8 @@ ui <- dashboardPage(
                  icon = icon("upload"),
                  
                  box(
-                   title = "",
                    status = "info",
                    width = 7,
-                   solidHeader = TRUE,
                    
                    p(text1),
                    
@@ -191,14 +207,26 @@ ui <- dashboardPage(
                  icon = icon("chart-line"), 
                  
                  box(
-                   title = "",
-                   width = 7,
-                   solidHeader = TRUE,
                    status = "info",
-                   
+                   width = 7,
+
                    p(text2),
-                   checkboxInput("check_plot.all", "Visualization of all plots across every process step"),
-                   plotOutput("plot", height = "700px")
+                   
+                   fluidRow(
+                     column(4, checkboxInput("check_plot.all","Visualization of all plots across every process step")),
+                     
+                     column(8, radioButtons(
+                              "plot_type",
+                              "Select visualization:",
+                              choices = c(
+                                "Visualization with pU" = "pU",
+                                "Visualization with VeRUS" = "VeRUS"
+                              ),
+                              selected = "pU"
+                            )
+                          ),
+                     
+                  ), plotOutput("plot", height = "700px")
                  )
         ),
          
@@ -206,10 +234,8 @@ ui <- dashboardPage(
                   icon = icon("table"),
                   
                   box(
-                    title = "",
                     status = "info",
                     width = 7,
-                    solidHeader = TRUE,
                     
                     p(text3),
                     plotOutput("plotrefineR", height = "700px"),
@@ -221,10 +247,8 @@ ui <- dashboardPage(
                   icon = icon("table"),
                   
                   box(
-                    title = "",
                     status = "info",
                     width = 7,
-                    solidHeader = TRUE,
                     
                     p(text4),
                     plotOutput("plotmclust", height = "700px"),
@@ -403,6 +427,18 @@ server <- function(input, output, session) {
       })
     }
   }, ignoreNULL = FALSE)
+  
+  plot_choice <- reactive({
+    
+    if(input$plot_type == "pU"){
+      return("pU")
+    }
+    
+    if(input$plot_type == "VeRUS"){
+      return("VeRUS")
+    }
+    
+  })
   ##################################### Reactive Expressions ######################################
   
   # Create the table with the dataset as reactive expression 
@@ -527,7 +563,7 @@ server <- function(input, output, session) {
                   "(reflim) n = 0. The absolute minimum for reference limit estimation is 40."))
     
     if (input$check_target == FALSE && input$check_targetvalues == FALSE && input$check_refineR == FALSE) {
-      reflim_text <- reflim(dat[,4], n.min = input$nmin, plot.all = FALSE)
+      reflim_text <- reflim(dat[,4], n.min = input$nmin, plot.all = FALSE, plot.it = FALSE)
     }
     
     if (input$check_target) {
@@ -543,7 +579,7 @@ server <- function(input, output, session) {
       validate(need(input$target_low > 0 && input$target_upper > 0, 
                     "(reflim) the lower and upper target limit must be greater than 0."))
       
-      reflim_text <- reflim(dat[,4], targets = c(input$target_low, input$target_upper), n.min = input$nmin, plot.all = FALSE)
+      reflim_text <- reflim(dat[,4], targets = c(input$target_low, input$target_upper), n.min = input$nmin, plot.all = FALSE, plot.it = FALSE)
     }
     
     if (input$check_targetvalues) {
@@ -566,7 +602,7 @@ server <- function(input, output, session) {
       validate(need(nrow(targets_values) > 0, 
                     "(reflim) There are no preloaded target values for this parameter!"))
       
-      reflim_text <- reflim(dat[,4], targets = c(targetvalues_low, targetvalues_upper), n.min = input$nmin, plot.all = FALSE)
+      reflim_text <- reflim(dat[,4], targets = c(targetvalues_low, targetvalues_upper), n.min = input$nmin, plot.all = FALSE, plot.it = FALSE)
     }
     
     if(input$check_refineR) {
@@ -577,7 +613,7 @@ server <- function(input, output, session) {
       targetvalues_low <- table_refineR$PointEst[1]
       targetvalues_upper <- table_refineR$PointEst[2]
       
-      reflim_text <- reflim(dat[,4], targets = c(targetvalues_low, targetvalues_upper), n.min = input$nmin, plot.all = FALSE)
+      reflim_text <- reflim(dat[,4], targets = c(targetvalues_low, targetvalues_upper), n.min = input$nmin, plot.all = FALSE, plot.it = FALSE)
     }
     
     report <- reflim_text
@@ -590,8 +626,25 @@ server <- function(input, output, session) {
   output$plot <- renderPlot({
     
     dat <- reflim_data()
+    report <- get_data_report()
+    
+    plot_choice <- plot_choice()
+    
     validate(need(nrow(dat) > 39,
                   "(reflim) n = 0. The absolute minimum for reference limit estimation is 40."))
+    
+    if(input$lambda_type == "reflimR"){
+      if(report$lognormal){
+        lambda <- 0
+      } else{
+        lambda <- 1
+      }
+    } else if(input$lambda_type == "refineR"){
+      validate(need(refineR_done(), "(refineR) Please perform the refineR calculation first."))
+      lambda <- lambda_refineR
+    } else if(input$lambda_type == "user"){
+      lambda <- input$lambda
+    }
     
     reflimR.plot.all <- FALSE
     
@@ -612,7 +665,10 @@ server <- function(input, output, session) {
       validate(need(input$target_low > 0 && input$target_upper > 0, 
                     "(reflim) the lower and upper target limit must be greater than 0."))
       
-      reflim_result <- reflim(dat[, 4], targets = c(input$target_low, input$target_upper), n.min = input$nmin, plot.all = reflimR.plot.all)
+      if(plot_choice == "VeRUS"){
+        reflim_result <- reflim_VeRUS(dat[, 4], targets = c(input$target_low, input$target_upper), n.min = input$nmin, plot.all = reflimR.plot.all, lambda = lambda)}
+      if(plot_choice == "pU"){
+        reflim_result <- reflim(dat[, 4], targets = c(input$target_low, input$target_upper), n.min = input$nmin, plot.all = reflimR.plot.all)}
     }
     
     if (input$check_targetvalues) {
@@ -634,7 +690,10 @@ server <- function(input, output, session) {
       validate(need(nrow(targets_values) > 0, 
                     "(reflim) There are no preloaded target values for this parameter!"))
       
-      reflim_result <- reflim(dat[, 4], targets = c(targetvalues_low, targetvalues_upper), n.min = input$nmin, plot.all = reflimR.plot.all)
+      if(plot_choice == "VeRUS"){
+        reflim_result <- reflim_VeRUS(dat[, 4], targets = c(targetvalues_low, targetvalues_upper), n.min = input$nmin, plot.all = reflimR.plot.all, lambda = lambda)}
+      if(plot_choice == "pU"){
+        reflim_result <- reflim(dat[, 4], targets = c(targetvalues_low, targetvalues_upper), n.min = input$nmin, plot.all = reflimR.plot.all)}
     }
     
     if(input$check_refineR) {
@@ -645,14 +704,27 @@ server <- function(input, output, session) {
       targetvalues_low <- table_refineR$PointEst[1]
       targetvalues_upper <- table_refineR$PointEst[2]
       
-      reflim_result <- reflim(dat[,4], targets = c(targetvalues_low, targetvalues_upper), n.min = input$nmin, plot.all = reflimR.plot.all)
+      if(plot_choice == "VeRUS"){
+        reflim_result <- reflim_VeRUS(dat[, 4], targets = c(targetvalues_low, targetvalues_upper), n.min = input$nmin, plot.all = reflimR.plot.all, lambda = lambda)}
+      if(plot_choice == "pU"){
+        reflim_result <- reflim(dat[,4], targets = c(targetvalues_low, targetvalues_upper), n.min = input$nmin, plot.all = reflimR.plot.all)}
     }
     
     if (input$check_target == FALSE && input$check_targetvalues == FALSE && input$check_refineR == FALSE) {
-      reflim_result <- reflim(dat[, 4], n.min = input$nmin, plot.all = reflimR.plot.all)
+      
+      if(plot_choice == "VeRUS"){
+        reflim_result <- reflim_VeRUS(dat[, 4], n.min = input$nmin, plot.all = reflimR.plot.all, lambda = lambda)}
+      if(plot_choice == "pU"){
+        reflim_result <- reflim(dat[, 4], n.min = input$nmin, plot.all = reflimR.plot.all)}
     }
     
     reflim_result
+    if(plot_choice == "VeRUS"){
+      if(!reflimR.plot.all){
+      usr <- par("usr")
+      rect(usr[1], usr[3], usr[2], usr[4], border = "azure4", lwd = 5, bty = "o")
+      }
+    }
   })
   
   output$table <- DT::renderDataTable({
@@ -669,10 +741,22 @@ server <- function(input, output, session) {
                               "m" = "Male(M)",
                               "t" = "Female(F) & Male(M)")
       
-      if(report$lognormal){
-        lambda = 0
-      } else{
-        lambda = 1
+      
+      if(input$lambda_type == "reflimR"){
+        
+        if(report$lognormal){
+          lambda <- 0
+        } else{
+          lambda <- 1
+        }
+        
+      } else if(input$lambda_type == "refineR"){
+        
+        validate(need(refineR_done(), "(refineR) Please perform the refineR calculation first."))
+        lambda <- lambda_refineR
+      } else if(input$lambda_type == "user"){
+        
+        lambda <- input$lambda
       }
       
       report_versus <- verus.limits(report$limits[1], report$limits[2], lambda = lambda)
@@ -709,11 +793,12 @@ server <- function(input, output, session) {
         "Upper VeRUS target intervals:" = paste0(report_upper_target_VeRUS[1], " - " , report_upper_target_VeRUS[2]),
         "Interpretation of the lower limit:" = report$interpretation[1],
         "Interpretation of the upper limit:" = report$interpretation[2],
+        "Lambda for VeRUS:" = lambda,
         check.names = FALSE))
       colnames(table_report) <- input$parameter
       
       DT::datatable(table_report, extensions = 'Buttons',
-                    options = list(dom = 'Bt', pageLength = 18, buttons = c('copy', 'csv', 'pdf', 'print')))
+                    options = list(dom = 'Bt', pageLength = 19, buttons = c('copy', 'csv', 'pdf', 'print')))
     }
   })
    
@@ -781,7 +866,10 @@ server <- function(input, output, session) {
   
   output$table_report_refineR <- DT::renderDataTable({
     
-    table_refineR <- getRI(fit_refineR())
+    table_refineR_original <- fit_refineR()
+    table_refineR <- getRI(table_refineR_original)
+    
+    lambda_refineR <<- table_refineR_original$Lambda
     
     converted_sex <- switch(input$sex,
                             "f" = "Female(F)",
@@ -792,6 +880,7 @@ server <- function(input, output, session) {
       "Sex and Age:" = paste0(converted_sex, " (", input$age_end[1], "-", input$age_end[2], ")"),
       "Category:" = input$category,
       "Reference limit:" =  paste0(round(table_refineR$PointEst[1], 3) , " - " , round(table_refineR$PointEst[2], 3)),
+      "Lambda:" = table_refineR_original$Lambda,
       check.names = FALSE))
     colnames(table_report) <- input$parameter
     
