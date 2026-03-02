@@ -137,7 +137,7 @@ ui <- dashboardPage(
         condition = "input.lambda_type == 'user'",
         sliderInput(
           "lambda",
-          "Select lambda for VeRUS:",
+          "Select lambda for UM:",
           min = 0,
           max = 1,
           value = 0.5,
@@ -188,7 +188,7 @@ ui <- dashboardPage(
                    p(text1),
                    
                    fluidRow(
-                     column(6, checkboxInput("show_table", "Show and use editable table for upload. Please click Submit!", value = FALSE)),
+                     column(6, checkboxInput("show_table", tags$b("Show and use editable table for upload. Please click Submit!"), value = FALSE)),
                      column(6, actionButton("submit", "Submit"))
                    ),
                    conditionalPanel(
@@ -219,8 +219,8 @@ ui <- dashboardPage(
                               "plot_type",
                               "Select visualization:",
                               choices = c(
-                                "Visualization with pU" = "pU",
-                                "Visualization with VeRUS" = "VeRUS"
+                                "Visualization with EL" = "pU",
+                                "Visualization with UM" = "VeRUS"
                               ),
                               selected = "pU"
                             )
@@ -252,6 +252,7 @@ ui <- dashboardPage(
                     
                     p(text4),
                     plotOutput("plotmclust", height = "700px"),
+                    plotOutput("plotmclustbic", height = "700px")
                   )
         )
       ),
@@ -437,23 +438,28 @@ server <- function(input, output, session) {
     if(input$plot_type == "VeRUS"){
       return("VeRUS")
     }
-    
   })
+  
   ##################################### Reactive Expressions ######################################
   
   # Create the table with the dataset as reactive expression 
   reflim_data <- reactive({
     
-    input$nmin
-    input$sex
-    input$parameter
+    input$age_end
     input$category
     input$check_plot.all
-    input$check_targetvalues
     input$check_refineR
     input$check_target
+    input$check_targetvalues
     input$dataset_file
-    input$age_end
+    input$dataset_file1
+    input$lambda
+    input$nmin
+    input$parameter
+    input$plot_type
+    input$sex
+    input$target_low
+    input$target_upper
     
     if(input$show_table && input$submit) {
        dataset <- data_store()
@@ -505,16 +511,21 @@ server <- function(input, output, session) {
   
   get_alldata_file <- reactive({
     
-    input$nmin
-    input$sex
-    input$parameter
+    input$age_end
     input$category
     input$check_plot.all
-    input$check_targetvalues
     input$check_refineR
     input$check_target
+    input$check_targetvalues
     input$dataset_file
-    input$age_end
+    input$dataset_file1
+    input$lambda
+    input$nmin
+    input$parameter
+    input$plot_type
+    input$sex
+    input$target_low
+    input$target_upper
     
     if(input$show_table && input$submit) {
       dataset <- data_store()
@@ -620,6 +631,35 @@ server <- function(input, output, session) {
     
     return(report)
   })
+  
+  fit_refineR <- reactive({
+    
+    input$age_end
+    input$category
+    input$check_plot.all
+    input$check_refineR
+    input$check_target
+    input$check_targetvalues
+    input$dataset_file
+    input$dataset_file1
+    input$lambda
+    input$nmin
+    input$parameter
+    input$plot_type
+    input$sex
+    input$target_low
+    input$target_upper
+    
+    withProgress(message = "RI calculation with refineR …", {
+      
+      dat <- reflim_data()
+      fit <- findRI(Data = dat[, 4])
+      refineR_done(TRUE)
+      
+      fit
+    })
+  })
+  
   
   ##################################### Output ####################################################
   
@@ -743,19 +783,15 @@ server <- function(input, output, session) {
       
       
       if(input$lambda_type == "reflimR"){
-        
         if(report$lognormal){
           lambda <- 0
         } else{
           lambda <- 1
         }
-        
       } else if(input$lambda_type == "refineR"){
-        
         validate(need(refineR_done(), "(refineR) Please perform the refineR calculation first."))
         lambda <- lambda_refineR
       } else if(input$lambda_type == "user"){
-        
         lambda <- input$lambda
       }
       
@@ -774,26 +810,28 @@ server <- function(input, output, session) {
         report_upper_target_VeRUS <- c(round(report_target_versus$upper.lim.low, 1), round(report_target_versus$upper.lim.upp, 1))
       }
       
+      lognormal_value <<- report$lognormal
+      
       table_report <- t(data.frame(
         "Sex and Age:" = paste0(converted_sex, " (", input$age_end[1], "-", input$age_end[2], ")"),
         "Category:" = input$category,
         "Mean (sd):" = paste0(round(report$stats[1], 2), " (", round(report$stats[2], 2), ")"),
         "Lognormal Distribution:" = report$lognormal,
         "Reference limit:" =  paste0(report$limits[1] , " - " , report$limits[2]),
-        "Lower tolerance intervals (pU):" = paste0(report$limits[3], " - " , report$limits[4]),
-        "Upper tolerance intervals (pU):" = paste0(report$limits[5], " - " , report$limits[6]),
-        "Lower VeRUS intervals:" = paste0(report_lower_VeRUS[1], " - " , report_lower_VeRUS[2]),
-        "Upper VeRUS intervals:" = paste0(report_upper_VeRUS[1], " - " ,report_upper_VeRUS[2]),
+        "Lower tolerance intervals (EL):" = paste0(report$limits[3], " - " , report$limits[4]),
+        "Upper tolerance intervals (EL):" = paste0(report$limits[5], " - " , report$limits[6]),
+        "Lower UM intervals:" = paste0(report_lower_VeRUS[1], " - " , report_lower_VeRUS[2]),
+        "Upper UM intervals:" = paste0(report_upper_VeRUS[1], " - " ,report_upper_VeRUS[2]),
         "Lower confidence intervals:" = paste0(report$confidence.int[1], " - " , report$confidence.int[2]),
         "Upper confidence intervals:" = paste0(report$confidence.int[3], " - " , report$confidence.int[4]),
         "Target Limits:" = paste0(report$targets[1], " - " , report$targets[2]),
-        "Lower target tolerance intervals (pU):" = paste0(report$targets[3], " - " , report$targets[4]),
-        "Upper target tolerance intervals (pU):" = paste0(report$targets[5], " - " , report$targets[6]),
-        "Lower VeRUS target intervals:" = paste0(report_lower_target_VeRUS[1], " - " , report_lower_target_VeRUS[2]),
-        "Upper VeRUS target intervals:" = paste0(report_upper_target_VeRUS[1], " - " , report_upper_target_VeRUS[2]),
+        "Lower target tolerance intervals (EL):" = paste0(report$targets[3], " - " , report$targets[4]),
+        "Upper target tolerance intervals (EL):" = paste0(report$targets[5], " - " , report$targets[6]),
+        "Lower UM target intervals:" = paste0(report_lower_target_VeRUS[1], " - " , report_lower_target_VeRUS[2]),
+        "Upper UM target intervals:" = paste0(report_upper_target_VeRUS[1], " - " , report_upper_target_VeRUS[2]),
         "Interpretation of the lower limit:" = report$interpretation[1],
         "Interpretation of the upper limit:" = report$interpretation[2],
-        "Lambda for VeRUS:" = lambda,
+        "Lambda for UM:" = lambda,
         check.names = FALSE))
       colnames(table_report) <- input$parameter
       
@@ -804,7 +842,7 @@ server <- function(input, output, session) {
    
   refineR_done <- reactiveVal(FALSE)
   
-  observeEvent(input$parameters, { 
+  observeEvent(input$parameter, { 
     refineR_done(FALSE)
   })
   
@@ -830,26 +868,6 @@ server <- function(input, output, session) {
   
   observeEvent(input$dataset_file1, { 
     refineR_done(FALSE)
-  })
-  
-  fit_refineR <- reactive({
-    
-    input$parameters
-    input$category
-    input$sex
-    input$age_end
-    input$nmin
-    input$reset
-    input$dataset_file1
-    
-    withProgress(message = "RI calculation with refineR …", {
-      
-      dat <- reflim_data()
-      fit <- findRI(Data = dat[, 4])
-      refineR_done(TRUE)
-      
-      fit
-    })
   })
   
   output$plotrefineR <- renderPlot({
@@ -895,7 +913,15 @@ server <- function(input, output, session) {
     
     withProgress(message = "mclust Calculation …", {
       dat <- reflim_data()
-      lab_mclust(dat[, 4])
+      lab_mclust(dat[, 4], lognormal = lognormal_value, remove.extremes = T)
+    })
+  })
+  
+  output$plotmclustbic <- renderPlot({
+    
+    withProgress(message = "mclust Calculation …", {
+      dat <- reflim_data()
+      lab_mclust(dat[, 4], lognormal = lognormal_value, remove.extremes = T, plot.bic = T)
     })
   })
 }
