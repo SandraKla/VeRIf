@@ -243,17 +243,60 @@ ui <- dashboardPage(
                   )
         ),
         
-        tabPanel( "mclust", 
-                  icon = icon("table"),
-                  
-                  box(
-                    status = "info",
-                    width = 7,
-                    
-                    p(text4),
-                    plotOutput("plotmclust", height = "700px"),
-                    plotOutput("plotmclustbic", height = "700px")
+        tabPanel(
+          "mclust",
+          icon = icon("table"),
+          
+          box(
+            status = "info",
+            width = 7,
+            
+            p(text4),
+            
+            fluidRow(
+              
+              column(
+                3,
+                checkboxInput(
+                  inputId = "auto_cluster",
+                  label = "Select optimal number of clusters automatically",
+                  value = TRUE
+                )
+              ),
+              
+              column(
+                3,
+                conditionalPanel(
+                  condition = "input.auto_cluster == false",
+                  numericInput(
+                    inputId = "n_cluster",
+                    label = "Number of clusters:",
+                    value = 3,
+                    min = 1,
+                    max = 15,
+                    step = 1
                   )
+                )
+              ),
+              
+              column(
+                6,
+                radioButtons(
+                  inputId = "model_name",
+                  label = "Univariate model for mClust:",
+                  choices = c("Equal variance (one-dimensional)" = "E", "Variable/unqual variance (one-dimensional)" = "V"),
+                  selected = "V"
+                )
+              )
+            ),
+            
+            plotOutput("plotmclust", height = "700px"),
+            
+            conditionalPanel(
+              condition = "input.auto_cluster == true",
+              plotOutput("plotmclustbic", height = "700px")
+            )
+          )
         )
       ),
       
@@ -595,8 +638,12 @@ server <- function(input, output, session) {
     
     if (input$check_targetvalues) {
       
-      validate(need(input$sex != "t", 
-                    "(reflim) The reference intervals are sex-specific. Please select a sex."))
+      validate(
+        need(
+          input$sex != "t" || input$parameter %in% c("ALB", "BIL", "PROT"),
+          "(reflim) The reference intervals are sex-specific. Please select a sex."
+        )
+      )
       
       targets <- reflimR::targetvalues
       targets_values <- targets[targets$analyte == input$parameter, ]
@@ -606,6 +653,10 @@ server <- function(input, output, session) {
         targetvalues_upper <- targets_values[, 6]
       }
       if (input$sex == "f") {
+        targetvalues_low <- targets_values[, 3]
+        targetvalues_upper <- targets_values[, 4]
+      }
+      if (input$sex == "t") {
         targetvalues_low <- targets_values[, 3]
         targetvalues_upper <- targets_values[, 4]
       }
@@ -712,8 +763,12 @@ server <- function(input, output, session) {
     }
     
     if (input$check_targetvalues) {
-      validate(need(input$sex != "t",
-                    "(reflim) The reference intervals are sex-specific. Please select a sex."))
+      validate(
+        need(
+          input$sex != "t" || input$parameter %in% c("ALB", "BIL", "PROT"),
+          "(reflim) The reference intervals are sex-specific. Please select a sex."
+        )
+      )
       
       targets <- reflimR::targetvalues
       targets_values <- targets[targets$analyte == input$parameter,]
@@ -723,6 +778,10 @@ server <- function(input, output, session) {
         targetvalues_upper <- targets_values[, 6]
       }
       if (input$sex == "f") {
+        targetvalues_low <- targets_values[, 3]
+        targetvalues_upper <- targets_values[, 4]
+      }
+      if (input$sex == "t") {
         targetvalues_low <- targets_values[, 3]
         targetvalues_upper <- targets_values[, 4]
       }
@@ -911,17 +970,35 @@ server <- function(input, output, session) {
   
   output$plotmclust <- renderPlot({
     
+    validate(
+      need(
+        input$auto_cluster || 
+          (!is.null(input$n_cluster) && input$n_cluster >= 1 && input$n_cluster <= 15),
+        "Please choose a number of clusters between 1 and 15."
+      )
+    )
+    
     withProgress(message = "mclust Calculation …", {
       dat <- reflim_data()
-      lab_mclust(dat[, 4], lognormal = lognormal_value, remove.extremes = T)
+      n_cluster <- if (input$auto_cluster) NULL else input$n_cluster
+      lab_mclust(dat[, 4], lognormal = lognormal_value, model = input$model_name, n.cluster = n_cluster, remove.extremes = T)
     })
   })
   
   output$plotmclustbic <- renderPlot({
     
+    validate(
+      need(
+        input$auto_cluster || 
+          (!is.null(input$n_cluster) && input$n_cluster >= 1 && input$n_cluster <= 15),
+        "Please choose a number of clusters between 1 and 15."
+      )
+    )
+    
     withProgress(message = "mclust Calculation …", {
       dat <- reflim_data()
-      lab_mclust(dat[, 4], lognormal = lognormal_value, remove.extremes = T, plot.bic = T)
+      n_cluster <- if (input$auto_cluster) NULL else input$n_cluster
+      lab_mclust(dat[, 4], lognormal = lognormal_value, model = input$model_name, n.cluster = n_cluster, remove.extremes = T, plot.bic = T)
     })
   })
 }
