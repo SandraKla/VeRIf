@@ -226,7 +226,7 @@ ui <- dashboardPage(
                             )
                           ),
                      
-                  ), plotOutput("plot", height = "700px")
+                  ), plotOutput("plot", height = "70vh")
                  )
         ),
          
@@ -238,7 +238,7 @@ ui <- dashboardPage(
                     width = 7,
                     
                     p(text3),
-                    plotOutput("plotrefineR", height = "700px"),
+                    plotOutput("plotrefineR", height = "70vh"),
                     DT::dataTableOutput("table_report_refineR")
                   )
         ),
@@ -290,11 +290,11 @@ ui <- dashboardPage(
               )
             ),
             
-            plotOutput("plotmclust", height = "700px"),
+            plotOutput("plotmclust", height = "70vh"),
             
             conditionalPanel(
               condition = "input.auto_cluster == true",
-              plotOutput("plotmclustbic", height = "700px")
+              plotOutput("plotmclustbic", height = "70vh")
             )
           )
         )
