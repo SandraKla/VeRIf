@@ -34,7 +34,7 @@ runApp("app.R")
 
 <img src="www/shiny.png" align="center"/>
 
-The package [reflimR](https://cran.r-project.org/web/packages/reflimR/index.html) (≥ 1.1.0) and [refineR](https://cran.r-project.org/web/packages/refineR/index.html) (≥ 2.0.0), [mclust](https://cran.r-project.org/web/packages/mclust/index.html) (≥ 6.1.2), [DT](https://cran.r-project.org/web/packages/DT/index.html) (≥ 0.33), [readxl](https://cran.r-project.org/web/packages/readxl/index.html) (≥ 1.4.5), [rhandsontable](https://cran.r-project.org/web/packages/rhandsontable/index.html) (≥ 0.3.8) and [shinydashboard](https://cran.r-project.org/web/packages/shinydashboard/index.html) (≥ 0.7.2) are downloaded or imported when starting this app. The used [R](https://www.r-project.org)-Version must be ≥ 4.5.2.
+The package [reflimR](https://cran.r-project.org/web/packages/reflimR/index.html) (≥ 1.1.0), [refineR](https://cran.r-project.org/web/packages/refineR/index.html) (≥ 2.0.0), [mclust](https://cran.r-project.org/web/packages/mclust/index.html) (≥ 6.1.2), [DT](https://cran.r-project.org/web/packages/DT/index.html) (≥ 0.33), [readxl](https://cran.r-project.org/web/packages/readxl/index.html) (≥ 1.4.5), [rhandsontable](https://cran.r-project.org/web/packages/rhandsontable/index.html) (≥ 0.3.8), [rpart](https://cran.r-project.org/web/packages/rpart/index.html) (≥ 4.1.24), [rpart.plot](https://cran.r-project.org/web/packages/rpart.plot/index.html) (≥ 3.1.4), [shinycssloaders](https://cran.r-project.org/web/packages/shinycssloaders/index.html) (≥ 1.1.0) and [shinydashboard](https://cran.r-project.org/web/packages/shinydashboard/index.html) (≥ 0.7.2) are downloaded or imported when starting this app. The used [R](https://www.r-project.org) version must be ≥ 4.5.2.
 
 ## Preloaded dataset
 Data from the [UC Irvine Machine Learning Repository](https://archive.ics.uci.edu/ml/datasets/HCV+data) showing *livertests* has been preloaded into this Shiny App. In addition, the corresponding reference intervals are stored in *targetvalues*. The reference interval table has been derived from the data published in the [Clinical Laboratory Diagnostics](https://www.clinical-laboratory-diagnostics.com) by Lothar Thomas, MD.
@@ -44,7 +44,7 @@ These columns should be used for new data:
 
 * **Category**:   Name of the category to filter the data
 * **Age**:        Age in years
-* **Sex**:        "m" for male and "f" for female
+* **Sex**:        For example "m" for male and "f" for female
 * **Value**:      Column name is the analyte name, values are the laboratory measures
 
 Starting with the fourth column, enter the laboratory value; the other three columns can be in any order. The data from *livertests* serves as a [template](https://github.com/SandraKla/VeRIf/tree/main/www/template.csv). To load new data, the data should be in CSV format with values separated by semicolons (;), and decimal numbers should use a comma (,) as the decimal separator. The first row should contain column headers.
@@ -57,7 +57,8 @@ In the “Upload” tab, new datasets can be uploaded. The main tab, “reflimR�
 By clicking “Visualization of all plots across every process step”, all plots generated throughout the workflow can be displayed.
 
 If, during the verification with *reflimR* and its target values or own target values, a yellow or red bar appears, a follow-up analysis using *refineR* is recommended in the "refineR" tab. The resulting reference intervals from *refineR* can be used as new target values and re-verified with *reflimR*.
-If all indicators turn green, this suggests that the manufacturer’s target values are likely incorrect. If one or more indicators remain yellow or red, the data are considered too challenging for indirect methods. This assumption can be further evaluated in the “mclust” tab using a Gaussian mixture model (*mclust*).
+If all indicators turn green, this suggests that the manufacturer’s target values are likely incorrect. If one or more indicators remain yellow or red, the data are considered too challenging for indirect methods. This assumption can be further evaluated in the “mclust” tab using a Gaussian mixture model (*mclust*). 
+In the “rpart” tab, an additional stratification by age groups and gender is performed using recursive partitioning (*rpart*), enabling a more detailed assessment of subgroup-specific differences.
 
 ## Contact
 
