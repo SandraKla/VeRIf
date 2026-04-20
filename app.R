@@ -394,7 +394,7 @@ ui <- dashboardPage(
       ),
       
       box(
-        title = tagList(shiny::icon("table"), "Report:"),
+        title = tagList(shiny::icon("table"), "reflimR Results:"),
         status = "info",
         width = 5,
         solidHeader = TRUE,
@@ -1124,8 +1124,8 @@ server <- function(input, output, session) {
       iqr_value <- quartiles[2] - quartiles[1]
       
       if (is.finite(iqr_value) && iqr_value > 0) {
-        lower_fence <- quartiles[1] - 3 * iqr_value
-        upper_fence <- quartiles[2] + 3 * iqr_value
+        lower_fence <- quartiles[1] - 6 * iqr_value
+        upper_fence <- quartiles[2] + 6 * iqr_value
         
         dat <- dat[
           dat[[response_name]] >= lower_fence &
@@ -1444,7 +1444,7 @@ server <- function(input, output, session) {
     DT::datatable(table_report, extensions = 'Buttons',
                   caption = htmltools::tags$caption(
                     style = "caption-side: top; text-align: left; font-weight: bold; font-size: 16px;",
-                    "Report for refineR"
+                    "refineR Results:"
                   ), options = list(dom = 'Bt', pageLength = 15, buttons = c('copy', 'csv', 'pdf', 'print')))
   })
   
