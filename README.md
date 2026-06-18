@@ -42,7 +42,7 @@ Data from the [UC Irvine Machine Learning Repository](https://archive.ics.uci.ed
 ## New data
 These columns should be used for new data:
 
-* **Category**:   Name of the category to filter the data
+* **Category**:   Grouping variable used to filter the data, for example cohort, method, instrument or sample group. Use the same category name for rows that should be analyzed together; if no grouping is needed, use one constant category for all rows.
 * **Age**:        Age in years
 * **Sex**:        For example "m" for male and "f" for female
 * **Value**:      Column name is the analyte name, values are the laboratory measures

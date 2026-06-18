@@ -85,7 +85,7 @@ data_text <- HTML(paste0(
   "This Shiny App is based on the package ", a("reflimR", href = "https://cran.r-project.org/web/packages/reflimR/index.html"), 
   " for the estimation of reference limits from routine laboratory results:", br(), br(), 
   "These columns should be used for new data: Category: Name of the category to filter the data; Age: Age in years; Sex: m for male and f for female;
-  Value: Column name is the analyte name, values are the laboratory measures.Starting with the fourth column, enter the laboratory value; the other three columns can be in any order. The data from *livertests* serves as a template. 
+  Value: Column name is the analyte name, values are the laboratory measures. Starting with the fourth column, enter the laboratory value; the other three columns can be in any order. The data from *livertests* serves as a template. 
   To load new data, the data should be in CSV format with values separated by semicolons (;), and decimal numbers should use a comma (,) as the decimal separator. The first row should contain column headers.
   Alternatively, the data can be loaded into the editable table using the copy-and-paste function or with .xlsx.", br(), br(),
   "On the left side, the sidebar allows you to select the laboratory parameter, category, age and gender group. 
@@ -93,6 +93,7 @@ data_text <- HTML(paste0(
 ))
 reflim_text <- HTML(paste0(
   "These tab displays the corresponding plot and the outputs of the reflim() function, providing an estimation of new reference intervals or a verification of the selected target values. 
+  EL stands for equivalence limit. UM stands for uncertainty margin.
   By clicking “Visualization of all plots across every process step”, all plots generated throughout the workflow can be displayed."
 ))
 refineR_text<- HTML(paste0(
@@ -116,7 +117,22 @@ zlog_text <- HTML(paste0(
   zlog(x) = (log(x)–(log(LL)+ log(UL))/2)*3.92/(log(UL)–log(LL)). Values ranging from –1.96 to 1.96 are considered normal, while values below –5 and above 5 indicate pathological conditions."
 ))
 rpart_text <- HTML(paste0(
-  "Decision trees are used here to divide the data into subgroups based on age and sex. The method identifies groups with similar values, allowing more appropriate calculation of reference intervals. The tree is built using the rpart package and visualized with rpart.plot."))
+  "Decision trees are used here to divide the data into subgroups based on age and sex. The method identifies groups with similar values, allowing more appropriate calculation of reference intervals. The tree is built using the rpart package and visualized with rpart.plot."
+))
+about_text <- HTML(paste0(
+  "<p>VeRIf is an interactive Shiny web application for the verification and evaluation of reference intervals based on routine laboratory data using the R package reflimR. The web application supports medical laboratories in efficiently, transparently, and data-driven reviewing existing reference intervals.</p>",
+  br(), "<table class='table table-condensed' style='width: 100%; max-width: 900px;'>",
+  "<tr><td><strong>Version:</strong></td><td>1.0</td></tr>",
+  "<tr><td><strong>Depends:</strong></td><td>R (&gt;= 4.5.2)</td></tr>",
+  "<tr><td><strong>Imports:</strong></td><td>DT, mclust, refineR, reflimR, rhandsontable, readxl, rpart, rpart.plot, shiny, shinycssloaders, shinydashboard</td></tr>",
+  "<tr><td><strong>Author:</strong></td><td>Sandra Klawitter</td></tr>",
+  "<tr><td><strong>BugReports:</strong></td><td><a href='https://github.com/SandraKla/VeRIf/issues'>https://github.com/SandraKla/VeRIf/issues</a></td></tr>",
+  "<tr><td><strong>R-Code:</strong></td><td><a href='https://github.com/SandraKla/VeRIf'>https://github.com/SandraKla/VeRIf</a></td></tr>",
+  "</table>", br(),
+  "<p><strong>Disclaimer:</strong> Only anonymized data may be uploaded to this application. This application is provided &quot;as is&quot; and &quot;as available&quot;, without any express or implied warranties of any kind. No warranty is given regarding the accuracy, completeness, reliability, or timeliness of the results. ",
+  "The results are provided for informational and research purposes only and must not be used for diagnosis, treatment, prevention, or any form of clinical or medical decision-making. This application is not a medical device or medical product and does not replace professional medical advice. ",
+  "To the fullest extent permitted by law, the author disclaims all liability for any direct, indirect, incidental, consequential, or special damages arising from the use of this application or its results. Use of this application is entirely at your own risk.</p>"
+))
 
 ####################################### User Interface ############################################
 
@@ -150,39 +166,6 @@ ui <- dashboardPage(
       
       hr(),
       
-      numericInput(
-        "nmin",
-        "Minimum number required for reliable reference limit estimation:",
-        200,
-        min = 40,
-        max = 1000
-      ),
-      
-      radioButtons(
-        "lambda_type",
-        "Select lambda source:",
-        choices = c(
-          "Lambda from reflimR" = "reflimR",
-          "Lambda from refineR" = "refineR",
-          "User defined lambda" = "user"
-        ),
-        selected = "reflimR"
-      ),
-
-      conditionalPanel(
-        condition = "input.lambda_type == 'user'",
-        sliderInput(
-          "lambda",
-          "Select lambda for UM:",
-          min = 0,
-          max = 1,
-          value = 0.5,
-          step = 0.01
-        )
-      ),
-      
-      hr(),
-      
       checkboxInput("check_targetvalues", "Load preinstalled target values", value = FALSE),
       checkboxInput("check_target", "Load own target values", value = FALSE),
       
@@ -206,6 +189,39 @@ ui <- dashboardPage(
         )
       ), 
       uiOutput("refineR_checkbox_ui"),
+      hr(),
+      
+      numericInput(
+        "nmin",
+        "Minimum number required for reliable reference limit estimation:",
+        200,
+        min = 40,
+        max = 1000
+      ),
+      
+      radioButtons(
+        "lambda_type",
+        "Select lambda source:",
+        choices = c(
+          "Lambda from reflimR" = "reflimR",
+          "Lambda from refineR" = "refineR",
+          "User defined lambda" = "user"
+        ),
+        selected = "reflimR"
+      ),
+      
+      conditionalPanel(
+        condition = "input.lambda_type == 'user'",
+        sliderInput(
+          "lambda",
+          "Select lambda for UM:",
+          min = 0,
+          max = 1,
+          value = 0.5,
+          step = 0.01
+        )
+      ),
+      
       hr()
     )
   ),
@@ -376,21 +392,33 @@ ui <- dashboardPage(
                     #numericInput("tree_window_cp", "rpart: Complexity parameter", 0.01, min = 0, max = 10),
                     withSpinner(plotOutput("tree_rpart", height = "70vh"))
                   )
-        )#,
+        ),
         
-        # tabPanel( "zlog", 
+        # tabPanel( "zlog",
         #           icon = icon("table"),
-        #           
+        # 
         #           box(
         #             title = "",
         #             status = "info",
         #             width = 7,
         #             solidHeader = TRUE,
-        #             
+        # 
         #             p(zlog_text),
         #             DT::dataTableOutput("table_zlog",  height = "700px")
         #           )
-        # )
+        # ),
+        
+        tabPanel( "About",
+                  icon = icon("info-circle"),
+                  
+                  box(
+                    title = "",
+                    status = "info",
+                    width = 7,
+                    
+                    about_text
+                  )
+        )
       ),
       
       box(
@@ -1323,6 +1351,7 @@ server <- function(input, output, session) {
   output$table_report <- DT::renderDataTable({ #Tab:reflimR
     
     report <- get_data_report()
+    dat <- reflim_data()
     if (!is.na(report$limits[1])) {
       parameter_name <- parameter_display()
       converted_sex <- switch(input$sex,
@@ -1363,6 +1392,7 @@ server <- function(input, output, session) {
       
       table_report <- t(data.frame(
         "Sex and Age:" = paste0(converted_sex, " (", input$age_end[1], "-", input$age_end[2], ")"),
+        "n:" = nrow(dat),
         "Category:" = input$category,
         "Mean (sd):" = paste0(round(report$stats[1], 2), " (", round(report$stats[2], 2), ")"),
         "Lognormal Distribution:" = report$lognormal,
@@ -1385,7 +1415,7 @@ server <- function(input, output, session) {
       colnames(table_report) <- parameter_name
       
       DT::datatable(table_report, extensions = 'Buttons',
-                    options = list(dom = 'Bt', pageLength = 19, buttons = c('copy', 'csv', 'pdf', 'print')))
+                    options = list(dom = 'Bt', pageLength = 20, buttons = c('copy', 'csv', 'pdf', 'print')))
     }
   })
    
@@ -1553,27 +1583,27 @@ server <- function(input, output, session) {
   # })
   
   # output$table_zlog <- DT::renderDataTable({ #Tab:zlog
-  #   
+  # 
   #   dat <- reflim_data()
   #   report <- get_data_report()
-  #   
+  # 
   #   zlog_results <- numeric(nrow(dat))
   #   for (i in 1:nrow(dat)) {
   #     zlog_results[i] <- round_df(zlog(dat[i, 4], report$limits[1], report$limits[2]), 2)
   #   }
-  #   
+  # 
   #   reflim_data <- cbind(dat, "RI" = paste0(report$limits[1], " - " , report$limits[2]), "zlog" = zlog_results)
-  #   
+  # 
   #   options(htmlwidgets.TOJSON_ARGS = list(na = 'string'))
-  #   
-  #   DT::datatable(reflim_data, rownames = FALSE, extensions = 'Buttons',
+  # 
+  #   DT::datatable(reflim_data, rownames = FALSE, extensions = 'Buttons', class = 'cell-border',
   #                 options = list(dom = 'Blfrtip', pageLength = 15, buttons = c('copy', 'csv', 'pdf', 'print')),
   #                 caption = htmltools::tags$caption(style = 'caption-side: bottom; text-align: center;',
   #                                                   'Table: Dataset with the zlog values')) %>%
-  #     DT::formatStyle(columns = "zlog", 
+  #     DT::formatStyle(columns = "zlog",
   #                     color = styleEqual(reflim_data[,6], highzlogvalues(c(reflim_data[,6]))),
   #                     backgroundColor = styleEqual(reflim_data[,6], zlogcolor(c(reflim_data[,6])))) %>%
-  #     DT::formatStyle(columns = colnames(reflim_data)[4], 
+  #     DT::formatStyle(columns = colnames(reflim_data)[4],
   #                     color = styleEqual(reflim_data[,4], highzlogvalues(c(reflim_data[,6]))),
   #                     backgroundColor = styleEqual(reflim_data[,4], zlogcolor(c(reflim_data[,6]))))
   # })
