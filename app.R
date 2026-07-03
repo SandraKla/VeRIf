@@ -107,10 +107,7 @@ mclust_text <- HTML(paste0(
   "Gaussian mixture modelling for the verification of reference intervals."
 ))
 scatterplot_text <- HTML(paste0(
-  "The scatterplot shows the relationship between age and the laboratory value."
-))
-statistics_text <- HTML(paste0(
-  "The two figures show the distribution of sex across age and the laboratory value."
+  "The plots shows the relationship between age, sex and the laboratory value."
 ))
 zlog_text <- HTML(paste0(
   "zlog values are calculated from the dataset and the calculated reference intervals. The lower reference limits (LL) and upper reference limits (UL) can transform any result x into a zlog value using the following equation:
@@ -122,7 +119,7 @@ rpart_text <- HTML(paste0(
 about_text <- HTML(paste0(
   "<p>VeRIf is an interactive Shiny web application for the verification and evaluation of reference intervals based on routine laboratory data using the R package reflimR. The web application supports medical laboratories in efficiently, transparently, and data-driven reviewing existing reference intervals.</p>",
   br(), "<table class='table table-condensed' style='width: 100%; max-width: 900px;'>",
-  "<tr><td><strong>Version:</strong></td><td>1.0</td></tr>",
+  "<tr><td><strong>Version:</strong></td><td>1.0.1</td></tr>",
   "<tr><td><strong>Depends:</strong></td><td>R (&gt;= 4.5.2)</td></tr>",
   "<tr><td><strong>Imports:</strong></td><td>DT, mclust, refineR, reflimR, rhandsontable, readxl, rpart, rpart.plot, shiny, shinycssloaders, shinydashboard</td></tr>",
   "<tr><td><strong>Author:</strong></td><td>Sandra Klawitter</td></tr>",
@@ -227,10 +224,32 @@ ui <- dashboardPage(
   ),
   
   dashboardBody(
+    tags$head(
+      tags$style(HTML("
+        .shiny-input-disabled {
+          opacity: 0.55;
+        }
+      ")),
+      tags$script(HTML("
+        Shiny.addCustomMessageHandler('setInputDisabled', function(message) {
+          var input = document.getElementById(message.id);
+          if (!input) {
+            return;
+          }
+
+          input.disabled = !!message.disabled;
+
+          var container = input.closest('.form-group');
+          if (container) {
+            container.classList.toggle('shiny-input-disabled', !!message.disabled);
+          }
+        });
+      "))
+    ),
     fluidRow(
       
       tabsetPanel( 
-        tabPanel("Data", 
+        tabPanel("Input", 
                  icon = icon("upload"),
                  
                  box(
@@ -250,38 +269,25 @@ ui <- dashboardPage(
                     
                     uiOutput("dataset_file"),
                     uiOutput("upload_mapping_ui"),
-                    actionButton('reset', 'Reset Input', icon = icon("trash"))
+                    actionButton('reset', 'Reset Input', icon = icon("trash")), br(),br(),
+                    DT::dataTableOutput("table")
                   )
         ),
         
-        # tabPanel("Scatterplot", 
-        #          icon = icon("chart-line"),
-        #          
-        #          box(
-        #            title = "",
-        #            status = "info",
-        #            width = 7,
-        #            solidHeader = TRUE,
-        #            
-        #            p(scatterplot_text),
-        #            DT::dataTableOutput("table"),
-        #            plotOutput("scatterplot", height = "700px")
-        #          )
-        # ),
-        
-        # tabPanel( "Statistics", 
-        #           icon = icon("chart-bar"),
-        #           
-        #           box(
-        #             title = "",
-        #             status = "info",
-        #             width = 7,
-        #             solidHeader = TRUE,
-        #             
-        #             p(statistics_text),
-        #             plotOutput("plot_statistics", height = "700px")
-        #           )
-        # ),
+        tabPanel("Overview",
+                 icon = icon("chart-line"),
+
+                 box(
+                   title = "",
+                   status = "info",
+                   width = 7,
+                   solidHeader = TRUE,
+
+                   p(scatterplot_text),
+                   plotOutput("scatterplot", height = "350px"),
+                   plotOutput("plot_statistics", height = "700px")
+                 )
+        ),
         
         tabPanel("reflimR", 
                  icon = icon("chart-line"), 
@@ -310,7 +316,7 @@ ui <- dashboardPage(
                  )
         ),
         
-        tabPanel( "refineR", 
+        tabPanel("refineR", 
                   icon = icon("chart-line"),
                   
                   box(
@@ -323,8 +329,7 @@ ui <- dashboardPage(
                   )
         ),
         
-        tabPanel(
-          "mclust",
+        tabPanel("mclust",
           icon = icon("chart-line"),
           
           box(
@@ -379,7 +384,7 @@ ui <- dashboardPage(
           )
         ),
         
-        tabPanel( "rpart", 
+        tabPanel("rpart", 
                   icon = icon("chart-bar"),
                   
                   box(
@@ -408,7 +413,7 @@ ui <- dashboardPage(
         #           )
         # ),
         
-        tabPanel( "About",
+        tabPanel("About",
                   icon = icon("info-circle"),
                   
                   box(
@@ -443,6 +448,13 @@ server <- function(input, output, session) {
   
   options(shiny.sanitize.errors = TRUE)
   options(warn = -1)
+
+  updateInputDisabled <- function(input_id, disabled) {
+    session$sendCustomMessage(
+      "setInputDisabled",
+      list(id = input_id, disabled = isTRUE(disabled))
+    )
+  }
   
   values <- reactiveValues(
     upload_state = NULL
@@ -820,6 +832,9 @@ server <- function(input, output, session) {
     selectInput("category", "Select category:", choices = choices, selected = selected_category)
   })
   
+  preinstalled_targetvalues_available <- reactive({
+    is.null(dataset_input()) && !(isTRUE(input$show_table) && isTRUE(input$submit > 0))
+  })
   
   # Create a reactive values to track the state of the checkboxes
   reactive_values <- reactiveValues(
@@ -830,7 +845,7 @@ server <- function(input, output, session) {
   
   # Observe changes in check_targetvalues and update the reactive value
   observeEvent(input$check_targetvalues, {
-    if (input$check_targetvalues) {
+    if (input$check_targetvalues && preinstalled_targetvalues_available()) {
       reactive_values$check_targetvalues <- TRUE
       reactive_values$check_target <- FALSE
       reactive_values$check_refineR <- FALSE
@@ -838,6 +853,12 @@ server <- function(input, output, session) {
       reactive_values$check_targetvalues <- FALSE
     }
   })
+
+  observeEvent(preinstalled_targetvalues_available(), {
+    if (!preinstalled_targetvalues_available()) {
+      reactive_values$check_targetvalues <- FALSE
+    }
+  }, ignoreInit = FALSE)
   
   # Observe changes in check_target and update the reactive value
   observeEvent(input$check_target, {
@@ -866,6 +887,13 @@ server <- function(input, output, session) {
     updateCheckboxInput(session, "check_targetvalues", value = reactive_values$check_targetvalues)
     updateCheckboxInput(session, "check_target", value = reactive_values$check_target)
     updateCheckboxInput(session, "check_refineR", value = reactive_values$check_refineR)
+    updateInputDisabled(
+      "check_targetvalues",
+      !preinstalled_targetvalues_available() ||
+        (!isTRUE(reactive_values$check_targetvalues) &&
+        (isTRUE(reactive_values$check_target) || isTRUE(reactive_values$check_refineR))
+        )
+    )
   })
   
   observeEvent(input$submit, {
@@ -1531,56 +1559,56 @@ server <- function(input, output, session) {
     })
   })
   
-  # output$scatterplot <- renderPlot({ #Tab:Scatterplot
-  #   
-  #   dat <- reflim_data()
-  #   parameter_name <- parameter_display()
-  #   colors <- ifelse(dat[, 3] == "f", "indianred", "cornflowerblue")
-  #   pchs <- ifelse(dat[, 3] == "f", 17, 19)
-  #   plot(dat[,4] ~ dat[,2], pch = pchs, cex = 1, col = colors, xlab = "Age", ylab = parameter_name)
-  #   
-  #   unique_levels <- levels(factor(dat[, 3]))
-  #   legend("topright", legend = unique_levels, pch = c(17, 19)[1:length(unique_levels)], col = c("indianred", "cornflowerblue")[1:length(unique_levels)])
-  # })
-  
-  # output$plot_statistics <- renderPlot({ #Tab:Statistics
-  #   
-  #   par(mfrow = c(2,1))
-  #   
-  #   dat <- reflim_data()
-  #   ylab_ <- parameter_display()
-  #   
-  #   if (!(nrow(dat)) == 0) {
-  #     hist_data_w <- subset(dat, Sex == "f", select = Age)
-  #     hist_data_m <- subset(dat, Sex == "m", select = Age)
-  #     
-  #     hist_w <- hist(hist_data_w$Age, breaks = seq(min(dat[,2]) - 1,max(dat[,2]),by = 1))$counts
-  #     hist_m <- hist(hist_data_m$Age, breaks = seq(min(dat[,2]) - 1,max(dat[,2]),by = 1))$counts
-  #     
-  #     barplot(rbind(hist_m,hist_w), col = c("cornflowerblue","indianred"),
-  #             names.arg = seq(min(dat[,2]), max(dat[,2]), by = 1), xlab = "Age", las = 1, beside = TRUE, ylab = "Number of data")
-  #     abline(h = 0)
-  #     legend("topright", legend = c(paste0("m: ", nrow(hist_data_m)), paste0("f: ", nrow(hist_data_w))), col = c("cornflowerblue","indianred"), pch = c(19, 19))
-  #     
-  #     par(new = TRUE)
-  #     boxplot(dat[,2], horizontal = TRUE, axes = FALSE, col = rgb(0, 0, 0, alpha = 0.15))
-  #   }
-  #   
-  #   if (!(nrow(dat)) == 0) {
-  #     
-  #     if (input$sex == "m") {
-  #       boxplot(dat[,4]~interaction(dat[,3], dat[,2]), xlab = "Age", 
-  #               ylab = ylab_, col = "cornflowerblue", las = 2)
-  #     }
-  #     else if (input$sex == "f") {
-  #       boxplot(dat[,4]~interaction(dat[,3], dat[,2]), xlab = "Age", 
-  #               ylab = ylab_, col = "indianred", las = 2)
-  #     } else{
-  #       boxplot(dat[,4]~interaction(dat[,3], dat[,2]), xlab = "Age", 
-  #               ylab = ylab_, col = c("indianred", "cornflowerblue"), las = 2)
-  #     }
-  #   }
-  # })
+  output$scatterplot <- renderPlot({ #Tab:Scatterplot
+
+    dat <- reflim_data()
+    parameter_name <- parameter_display()
+    colors <- ifelse(dat[, 3] == "f", "indianred", "cornflowerblue")
+    pchs <- ifelse(dat[, 3] == "f", 17, 19)
+    plot(dat[,4] ~ dat[,2], pch = pchs, cex = 1, col = colors, xlab = "Age", ylab = parameter_name)
+
+    unique_levels <- levels(factor(dat[, 3]))
+    legend("topright", legend = unique_levels, pch = c(17, 19)[1:length(unique_levels)], col = c("indianred", "cornflowerblue")[1:length(unique_levels)])
+  })
+
+  output$plot_statistics <- renderPlot({ #Tab:Statistics
+
+    par(mfrow = c(2,1))
+
+    dat <- reflim_data()
+    ylab_ <- parameter_display()
+
+    if (!(nrow(dat)) == 0) {
+      hist_data_w <- subset(dat, Sex == "f", select = Age)
+      hist_data_m <- subset(dat, Sex == "m", select = Age)
+
+      hist_w <- hist(hist_data_w$Age, breaks = seq(min(dat[,2]) - 1,max(dat[,2]),by = 1))$counts
+      hist_m <- hist(hist_data_m$Age, breaks = seq(min(dat[,2]) - 1,max(dat[,2]),by = 1))$counts
+
+      barplot(rbind(hist_m,hist_w), col = c("cornflowerblue","indianred"),
+              names.arg = seq(min(dat[,2]), max(dat[,2]), by = 1), xlab = "Age", las = 1, beside = TRUE, ylab = "Number of data")
+      abline(h = 0)
+      legend("topright", legend = c(paste0("m: ", nrow(hist_data_m)), paste0("f: ", nrow(hist_data_w))), col = c("cornflowerblue","indianred"), pch = c(19, 19))
+
+      par(new = TRUE)
+      boxplot(dat[,2], horizontal = TRUE, axes = FALSE, col = rgb(0, 0, 0, alpha = 0.15))
+    }
+
+    if (!(nrow(dat)) == 0) {
+
+      if (input$sex == "m") {
+        boxplot(dat[,4]~interaction(dat[,3], dat[,2]), xlab = "Age",
+                ylab = ylab_, col = "cornflowerblue", las = 2)
+      }
+      else if (input$sex == "f") {
+        boxplot(dat[,4]~interaction(dat[,3], dat[,2]), xlab = "Age",
+                ylab = ylab_, col = "indianred", las = 2)
+      } else{
+        boxplot(dat[,4]~interaction(dat[,3], dat[,2]), xlab = "Age",
+                ylab = ylab_, col = c("indianred", "cornflowerblue"), las = 2)
+      }
+    }
+  })
   
   # output$table_zlog <- DT::renderDataTable({ #Tab:zlog
   # 
