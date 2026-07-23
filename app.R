@@ -119,7 +119,7 @@ rpart_text <- HTML(paste0(
 about_text <- HTML(paste0(
   "<p>VeRIf is an interactive Shiny web application for the verification and evaluation of reference intervals based on routine laboratory data using the R package reflimR. The web application supports medical laboratories in efficiently, transparently, and data-driven reviewing existing reference intervals.</p>",
   br(), "<table class='table table-condensed' style='width: 100%; max-width: 900px;'>",
-  "<tr><td><strong>Version:</strong></td><td>1.0.1</td></tr>",
+  "<tr><td><strong>Version:</strong></td><td>1.0.2</td></tr>",
   "<tr><td><strong>Depends:</strong></td><td>R (&gt;= 4.5.2)</td></tr>",
   "<tr><td><strong>Imports:</strong></td><td>DT, mclust, refineR, reflimR, rhandsontable, readxl, rpart, rpart.plot, shiny, shinycssloaders, shinydashboard</td></tr>",
   "<tr><td><strong>Author:</strong></td><td>Sandra Klawitter</td></tr>",
@@ -324,8 +324,7 @@ ui <- dashboardPage(
                     width = 7,
                     
                     p(refineR_text),
-                    withSpinner(plotOutput("plotrefineR", height = "70vh")),
-                    withSpinner(DT::dataTableOutput("table_report_refineR"))
+                    withSpinner(plotOutput("plotrefineR", height = "70vh"))
                   )
         ),
         
@@ -399,19 +398,19 @@ ui <- dashboardPage(
                   )
         ),
         
-        # tabPanel( "zlog",
-        #           icon = icon("table"),
-        # 
-        #           box(
-        #             title = "",
-        #             status = "info",
-        #             width = 7,
-        #             solidHeader = TRUE,
-        # 
-        #             p(zlog_text),
-        #             DT::dataTableOutput("table_zlog",  height = "700px")
-        #           )
-        # ),
+        tabPanel( "zlog",
+                  icon = icon("table"),
+
+                  box(
+                    title = "",
+                    status = "info",
+                    width = 7,
+                    solidHeader = TRUE,
+
+                    p(zlog_text),
+                    DT::dataTableOutput("table_zlog",  height = "700px")
+                  )
+        ),
         
         tabPanel("About",
                   icon = icon("info-circle"),
@@ -427,14 +426,23 @@ ui <- dashboardPage(
       ),
       
       box(
-        title = tagList(shiny::icon("table"), "reflimR Results:"),
+        title = tagList(shiny::icon("table"), "Results:"),
         status = "info",
         width = 5,
         solidHeader = TRUE,
         
-        withSpinner(DT::dataTableOutput("table_report")), hr(),
-        downloadButton("download_ritable", "Download all Reference Intervals"),
-        #downloadButton("download_zlogtable", "Download all zlog values")
+        tabsetPanel(
+          tabPanel(
+            "reflimR Results",
+            withSpinner(DT::dataTableOutput("table_report")), hr(),
+            downloadButton("download_ritable", "Download all Reference Intervals"),
+            downloadButton("download_zlogtable", "Download all zlog values")
+          ),
+          tabPanel(
+            "refineR Results",
+            withSpinner(DT::dataTableOutput("table_report_refineR"))
+          )
+        )
       )
     )
   )
@@ -1500,10 +1508,7 @@ server <- function(input, output, session) {
     colnames(table_report) <- parameter_name
     
     DT::datatable(table_report, extensions = 'Buttons',
-                  caption = htmltools::tags$caption(
-                    style = "caption-side: top; text-align: left; font-weight: bold; font-size: 16px;",
-                    "refineR Results:"
-                  ), options = list(dom = 'Bt', pageLength = 15, buttons = c('copy', 'csv', 'pdf', 'print')))
+                  options = list(dom = 'Bt', pageLength = 15, buttons = c('copy', 'csv', 'pdf', 'print')))
   })
   
   mclust_plot_digits <- function(x) {
@@ -1610,31 +1615,31 @@ server <- function(input, output, session) {
     }
   })
   
-  # output$table_zlog <- DT::renderDataTable({ #Tab:zlog
-  # 
-  #   dat <- reflim_data()
-  #   report <- get_data_report()
-  # 
-  #   zlog_results <- numeric(nrow(dat))
-  #   for (i in 1:nrow(dat)) {
-  #     zlog_results[i] <- round_df(zlog(dat[i, 4], report$limits[1], report$limits[2]), 2)
-  #   }
-  # 
-  #   reflim_data <- cbind(dat, "RI" = paste0(report$limits[1], " - " , report$limits[2]), "zlog" = zlog_results)
-  # 
-  #   options(htmlwidgets.TOJSON_ARGS = list(na = 'string'))
-  # 
-  #   DT::datatable(reflim_data, rownames = FALSE, extensions = 'Buttons', class = 'cell-border',
-  #                 options = list(dom = 'Blfrtip', pageLength = 15, buttons = c('copy', 'csv', 'pdf', 'print')),
-  #                 caption = htmltools::tags$caption(style = 'caption-side: bottom; text-align: center;',
-  #                                                   'Table: Dataset with the zlog values')) %>%
-  #     DT::formatStyle(columns = "zlog",
-  #                     color = styleEqual(reflim_data[,6], highzlogvalues(c(reflim_data[,6]))),
-  #                     backgroundColor = styleEqual(reflim_data[,6], zlogcolor(c(reflim_data[,6])))) %>%
-  #     DT::formatStyle(columns = colnames(reflim_data)[4],
-  #                     color = styleEqual(reflim_data[,4], highzlogvalues(c(reflim_data[,6]))),
-  #                     backgroundColor = styleEqual(reflim_data[,4], zlogcolor(c(reflim_data[,6]))))
-  # })
+  output$table_zlog <- DT::renderDataTable({ #Tab:zlog
+
+    dat <- reflim_data()
+    report <- get_data_report()
+
+    zlog_results <- numeric(nrow(dat))
+    for (i in 1:nrow(dat)) {
+      zlog_results[i] <- round_df(zlog(dat[i, 4], report$limits[1], report$limits[2]), 2)
+    }
+
+    reflim_data <- cbind(dat, "RI" = paste0(report$limits[1], " - " , report$limits[2]), "zlog" = zlog_results)
+
+    options(htmlwidgets.TOJSON_ARGS = list(na = 'string'))
+
+    DT::datatable(reflim_data, rownames = FALSE, extensions = 'Buttons', class = 'cell-border',
+                  options = list(dom = 'Blfrtip', pageLength = 15, buttons = c('copy', 'csv', 'pdf', 'print')),
+                  caption = htmltools::tags$caption(style = 'caption-side: bottom; text-align: center;',
+                                                    'Table: Dataset with the zlog values')) %>%
+      DT::formatStyle(columns = "zlog",
+                      color = styleEqual(reflim_data[,6], highzlogvalues(c(reflim_data[,6]))),
+                      backgroundColor = styleEqual(reflim_data[,6], zlogcolor(c(reflim_data[,6])))) %>%
+      DT::formatStyle(columns = colnames(reflim_data)[4],
+                      color = styleEqual(reflim_data[,4], highzlogvalues(c(reflim_data[,6]))),
+                      backgroundColor = styleEqual(reflim_data[,4], zlogcolor(c(reflim_data[,6]))))
+  })
   
   output$download_ritable <- downloadHandler(
     filename = function() {
@@ -1687,21 +1692,21 @@ server <- function(input, output, session) {
     }
   )
   
-  # output$download_zlogtable <- downloadHandler( #Tab:zlog
-  #   filename = function() {
-  #     paste("zlogValues_", Sys.Date(), ".csv", sep = "")
-  #   },
-  #   content = function(file) {
-  #     dat <- get_alldata_file()
-  #     
-  #     dataset <- dat[c(-1,-2,-3)]
-  #     reflim.loop.results <- reflim.loop(dataset, plot.it = FALSE)
-  #     zlog.loop.results <- zlog.loop(dataset, reflim.loop.results)
-  #     
-  #     result <- c(dat, zlog.loop.results)
-  #     write.csv(result, file)
-  #   }
-  # )
+  output$download_zlogtable <- downloadHandler( #Tab:zlog
+    filename = function() {
+      paste("zlogValues_", Sys.Date(), ".csv", sep = "")
+    },
+    content = function(file) {
+      dat <- get_alldata_file()
+
+      dataset <- dat[c(-1,-2,-3)]
+      reflim.loop.results <- reflim.loop(dataset, plot.it = FALSE)
+      zlog.loop.results <- zlog.loop(dataset, reflim.loop.results)
+
+      result <- c(dat, zlog.loop.results)
+      write.csv(result, file)
+    }
+  )
   
   output$tree_rpart <- renderPlot({ #Tab:rpart
     

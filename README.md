@@ -17,8 +17,8 @@ if("shiny" %in% rownames(installed.packages())){
 runGitHub("VeRIf", "SandraKla")
 ```
 
-**Method 2**:
-Download the Zip-File from this Shiny App. Unzip the file and set your working direction to the path of the folder. 
+**Method 2:**
+Download the ZIP file for this Shiny App. Unzip the file and set your working directory to the path of the folder.
 The package [shiny](https://cran.r-project.org/web/packages/shiny/index.html) (≥ 1.7.1) must be installed before using the Shiny App:
 
 ```bash
@@ -48,17 +48,25 @@ These columns should be used for new data:
 * **Value**:      Column name is the analyte name, values are the laboratory measures
 
 Starting with the fourth column, enter the laboratory value; the other three columns can be in any order. The data from *livertests* serves as a [template](https://github.com/SandraKla/VeRIf/tree/main/www/template.csv). To load new data, the data should be in CSV format with values separated by semicolons (;), and decimal numbers should use a comma (,) as the decimal separator. The first row should contain column headers.
-Alternatively, the data can be loaded into the editable table using the copy-and-paste function or with .xlsx (see [template](https://github.com/SandraKla/reflimR_Shiny/tree/main/www/template.xlsx)).
+Alternatively, the data can be loaded into the editable table using the copy-and-paste function or with XLSX (see [template](https://github.com/SandraKla/VeRIf/blob/main/www/template.xlsx)).
 
 ## Usage
 
-On the left side, the sidebar allows you to select the laboratory parameter, category, age and gender group. In the “Target Values” section, you can load target values from *targetvalues*, load reference intervals estimated with *refineR*, or manually enter custom values.
-In the “Upload” tab, new datasets can be uploaded. The main tab, “reflimR”, displays the corresponding plot and the outputs of the ```reflim()``` function, providing an estimation of new reference intervals or a verification of the selected target values. 
-By clicking “Visualization of all plots across every process step”, all plots generated throughout the workflow can be displayed.
+The left sidebar controls the laboratory parameter, category, sex and age range used throughout the analysis. It also allows you to use the preinstalled target values, enter custom target values, or reuse the reference interval estimated in the *refineR* tab.
 
-If, during the verification with *reflimR* and its target values or own target values, a yellow or red bar appears, a follow-up analysis using *refineR* is recommended in the "refineR" tab. The resulting reference intervals from *refineR* can be used as new target values and re-verified with *reflimR*.
-If all indicators turn green, this suggests that the manufacturer’s target values are likely incorrect. If one or more indicators remain yellow or red, the data are considered too challenging for indirect methods. This assumption can be further evaluated in the “mclust” tab using a Gaussian mixture model (*mclust*). 
-In the “rpart” tab, an additional stratification by age groups and gender is performed using recursive partitioning (*rpart*), enabling a more detailed assessment of subgroup-specific differences.
+The tabs provide the following functions:
+
+* **Input**: Upload a CSV or XLSX dataset, map the age and sex columns and the female/male values, or paste data into the editable table.
+* **Overview**: Inspect the relationship between age, sex and the selected laboratory parameter.
+* **reflimR**: Estimate a reference interval or verify selected target values with the `reflim()` function. The plot can display equivalence limits (EL) or uncertainty margins (UM).
+* **refineR**: Perform a follow-up indirect reference interval estimation. The resulting limits can be selected in the sidebar and re-verified with *reflimR*.
+* **mclust**: Examine the data with a Gaussian mixture model. The number of clusters can be selected automatically or entered manually.
+* **rpart**: Explore additional stratification by age and sex using a regression tree.
+* **zlog**: Display the dataset together with its calculated reference interval and a zlog value for every result.
+
+If a yellow or red bar appears while verifying target values with *reflimR*, a follow-up analysis with *refineR* is recommended. If the newly estimated limits produce green indicators when re-verified, this suggests that the original target values may be unsuitable. If one or more indicators remain yellow or red, the data may be too challenging for indirect methods; the *mclust* tab can help investigate this further.
+
+The results panel contains the detailed *reflimR* and *refineR* output. Tables can be copied, exported as CSV or PDF, or printed. **Download all Reference Intervals** creates a ZIP archive with results for all laboratory parameters, while **Download all zlog values** exports the corresponding values as CSV.
 
 ## Contact
 
