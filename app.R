@@ -84,8 +84,8 @@ dataset_original <- reflimR::livertests
 data_text <- HTML(paste0(
   "This Shiny App is based on the package ", a("reflimR", href = "https://cran.r-project.org/web/packages/reflimR/index.html"), 
   " for the estimation of reference limits from routine laboratory results:", br(), br(), 
-  "These columns should be used for new data: Category: Name of the category to filter the data; Age: Age in years; Sex: m for male and f for female;
-  Value: Column name is the analyte name, values are the laboratory measures. Starting with the fourth column, enter the laboratory value; the other three columns can be in any order. The data from *livertests* serves as a template. 
+  "These columns should be used for new data: Age: Age in years; Sex: m for male and f for female; Category (optional): Name of the category to filter the data;
+  Value: Column name is the analyte name, values are the laboratory measures. Laboratory values can start in the third column when no Category column is supplied; the columns can be in any order. The data from *livertests* serves as a template.
   To load new data, the data should be in CSV format with values separated by semicolons (;), and decimal numbers should use a comma (,) as the decimal separator. The first row should contain column headers.
   Alternatively, the data can be loaded into the editable table using the copy-and-paste function or with .xlsx.", br(), br(),
   "On the left side, the sidebar allows you to select the laboratory parameter, category, age and gender group. 
@@ -123,6 +123,7 @@ about_text <- HTML(paste0(
   "<tr><td><strong>Depends:</strong></td><td>R (&gt;= 4.5.2)</td></tr>",
   "<tr><td><strong>Imports:</strong></td><td>DT, mclust, refineR, reflimR, rhandsontable, readxl, rpart, rpart.plot, shiny, shinycssloaders, shinydashboard</td></tr>",
   "<tr><td><strong>Author:</strong></td><td>Sandra Klawitter</td></tr>",
+  "<tr><td><strong>E-Mail:</strong></td><td>sandra.klawitter@trillium.de</td></tr>",
   "<tr><td><strong>BugReports:</strong></td><td><a href='https://github.com/SandraKla/VeRIf/issues'>https://github.com/SandraKla/VeRIf/issues</a></td></tr>",
   "<tr><td><strong>R-Code:</strong></td><td><a href='https://github.com/SandraKla/VeRIf'>https://github.com/SandraKla/VeRIf</a></td></tr>",
   "</table>", br(),
@@ -148,11 +149,7 @@ ui <- dashboardPage(
       ),
       uiOutput("category"),
       
-      selectInput(
-        "sex",
-        "Select the sex:",
-        choices = c("Female (F) & Male (M)" = "t", "Female (F)" = "f", "Male (M)" = "m")
-      ),
+      uiOutput("sex_selection"),
       
       sliderInput(
         "age_end",
@@ -525,7 +522,8 @@ server <- function(input, output, session) {
     available_columns[1]
   }
 
-  guess_sex_value <- function(values, preferred_values = character(), excluded = NULL) {
+  guess_sex_value <- function(values, preferred_values = character(), excluded = NULL,
+                              fallback_first = TRUE) {
     available_values <- unique(as.character(values))
     available_values <- available_values[!is.na(available_values) & nzchar(trimws(available_values))]
     
@@ -548,7 +546,40 @@ server <- function(input, output, session) {
       return(available_values[matching_index[1]])
     }
     
-    available_values[1]
+    if (fallback_first) available_values[1] else NULL
+  }
+
+  guess_sex_mapping <- function(values) {
+    available_values <- unique(as.character(values))
+    available_values <- available_values[
+      !is.na(available_values) & nzchar(trimws(available_values))
+    ]
+
+    female_value <- guess_sex_value(
+      available_values,
+      c("f", "female", "weiblich", "w"),
+      fallback_first = FALSE
+    )
+    male_value <- guess_sex_value(
+      available_values,
+      c("m", "male", "mannlich", "maennlich", "mann", "man"),
+      fallback_first = FALSE
+    )
+
+    remaining_values <- available_values[
+      !normalize_upload_value(available_values) %in%
+        normalize_upload_value(c(female_value, male_value))
+    ]
+
+    if (is.null(female_value) && length(available_values) > 1 && length(remaining_values)) {
+      female_value <- remaining_values[1]
+      remaining_values <- remaining_values[-1]
+    }
+    if (is.null(male_value) && length(available_values) > 1 && length(remaining_values)) {
+      male_value <- remaining_values[1]
+    }
+
+    list(female = female_value, male = male_value)
   }
 
   uploaded_dataset_raw <- reactive({
@@ -618,28 +649,21 @@ server <- function(input, output, session) {
     sex_values <- unique(as.character(dataset[[selected_sex_column]]))
     sex_values <- sex_values[!is.na(sex_values) & nzchar(trimws(sex_values))]
     
-    guessed_female_value <- guess_sex_value(
-      sex_values,
-      preferred_values = c("f", "female", "weiblich", "w")
-    )
+    guessed_sex_mapping <- guess_sex_mapping(sex_values)
+    guessed_female_value <- guessed_sex_mapping$female
     selected_female_value <- if (!is.null(input$upload_female_value) &&
-                                 input$upload_female_value %in% sex_values) {
+                                 input$upload_female_value %in% c("", sex_values)) {
       input$upload_female_value
     } else {
-      guessed_female_value
+      if (is.null(guessed_female_value)) "" else guessed_female_value
     }
     
-    guessed_male_value <- guess_sex_value(
-      sex_values,
-      preferred_values = c("m", "male", "mannlich", "maennlich", "mann", "man"),
-      excluded = selected_female_value
-    )
+    guessed_male_value <- guessed_sex_mapping$male
     selected_male_value <- if (!is.null(input$upload_male_value) &&
-                               input$upload_male_value %in% sex_values &&
-                               normalize_upload_value(input$upload_male_value) != normalize_upload_value(selected_female_value)) {
+                               input$upload_male_value %in% c("", sex_values)) {
       input$upload_male_value
     } else {
-      guessed_male_value
+      if (is.null(guessed_male_value)) "" else guessed_male_value
     }
     
     tagList(
@@ -671,7 +695,7 @@ server <- function(input, output, session) {
           selectInput(
             "upload_female_value",
             "Value for female:",
-            choices = sex_values,
+            choices = c("Not present" = "", sex_values),
             selected = selected_female_value
           )
         ),
@@ -680,7 +704,7 @@ server <- function(input, output, session) {
           selectInput(
             "upload_male_value",
             "Value for male:",
-            choices = sex_values,
+            choices = c("Not present" = "", sex_values),
             selected = selected_male_value
           )
         )
@@ -718,22 +742,11 @@ server <- function(input, output, session) {
     validate(need(!is.null(sex_column), "Please choose the sex column."))
     validate(need(age_column != sex_column, "Age column and sex column must be different."))
     
-    named_category <- setdiff(
+    category_columns <- setdiff(
       names(dataset)[normalize_upload_value(names(dataset)) %in% c("category", "kategorie")],
       c(age_column, sex_column)
     )
-    category_candidates <- setdiff(names(dataset)[seq_len(min(3, ncol(dataset)))], c(age_column, sex_column))
-    remaining_columns <- setdiff(names(dataset), c(age_column, sex_column))
-    
-    category_column <- if (length(named_category)) {
-      named_category[1]
-    } else if (length(category_candidates)) {
-      category_candidates[1]
-    } else if (length(remaining_columns)) {
-      remaining_columns[1]
-    } else {
-      NULL
-    }
+    category_column <- if (length(category_columns)) category_columns[1] else NULL
     
     analyte_columns <- setdiff(names(dataset), c(category_column, age_column, sex_column))
     
@@ -743,30 +756,36 @@ server <- function(input, output, session) {
     ))
     
     sex_values <- dataset[[sex_column]]
-    female_value <- if (!is.null(input$upload_female_value) &&
-                        nzchar(trimws(input$upload_female_value))) {
-      input$upload_female_value
+    guessed_sex_mapping <- guess_sex_mapping(sex_values)
+    female_value <- if (!is.null(input$upload_female_value)) {
+      if (nzchar(trimws(input$upload_female_value))) input$upload_female_value else NULL
     } else {
-      guess_sex_value(sex_values, c("f", "female", "weiblich", "w"))
+      guessed_sex_mapping$female
     }
-    male_value <- if (!is.null(input$upload_male_value) &&
-                      nzchar(trimws(input$upload_male_value))) {
-      input$upload_male_value
+    male_value <- if (!is.null(input$upload_male_value)) {
+      if (nzchar(trimws(input$upload_male_value))) input$upload_male_value else NULL
     } else {
-      guess_sex_value(sex_values, c("m", "male", "mannlich", "maennlich", "mann", "man"), excluded = female_value)
+      guessed_sex_mapping$male
     }
     
-    validate(need(!is.null(female_value), "Please map one sex value to female."))
-    validate(need(!is.null(male_value), "Please map one sex value to male."))
     validate(need(
-      normalize_upload_value(female_value) != normalize_upload_value(male_value),
+      !is.null(female_value) || !is.null(male_value),
+      "Please map at least one sex value to female or male."
+    ))
+    validate(need(
+      is.null(female_value) || is.null(male_value) ||
+        normalize_upload_value(female_value) != normalize_upload_value(male_value),
       "Female and male must use different source values."
     ))
     
     normalized_sex <- rep(NA_character_, nrow(dataset))
     normalized_source_values <- normalize_upload_value(sex_values)
-    normalized_sex[normalized_source_values == normalize_upload_value(female_value)] <- "f"
-    normalized_sex[normalized_source_values == normalize_upload_value(male_value)] <- "m"
+    if (!is.null(female_value)) {
+      normalized_sex[normalized_source_values == normalize_upload_value(female_value)] <- "f"
+    }
+    if (!is.null(male_value)) {
+      normalized_sex[normalized_source_values == normalize_upload_value(male_value)] <- "m"
+    }
     
     category_values <- if (!is.null(category_column)) {
       as.character(dataset[[category_column]])
@@ -838,6 +857,35 @@ server <- function(input, output, session) {
     }
     
     selectInput("category", "Select category:", choices = choices, selected = selected_category)
+  })
+
+  output$sex_selection <- renderUI({
+    if (isTRUE(input$show_table) && isTRUE(input$submit > 0)) {
+      dataset <- data_store()
+    } else if (is.null(dataset_input())) {
+      dataset <- dataset_original
+    } else {
+      dataset <- uploaded_dataset_standardized()
+    }
+
+    available_sexes <- intersect(c("f", "m"), unique(as.character(dataset$Sex)))
+    choices <- if (identical(available_sexes, c("f", "m"))) {
+      c("Female (F) & Male (M)" = "t", "Female (F)" = "f", "Male (M)" = "m")
+    } else if (identical(available_sexes, "f")) {
+      c("Female (F)" = "f")
+    } else if (identical(available_sexes, "m")) {
+      c("Male (M)" = "m")
+    } else {
+      c("Female (F) & Male (M)" = "t", "Female (F)" = "f", "Male (M)" = "m")
+    }
+
+    selected_sex <- if (!is.null(input$sex) && input$sex %in% unname(choices)) {
+      input$sex
+    } else {
+      unname(choices)[1]
+    }
+
+    selectInput("sex", "Select the sex:", choices = choices, selected = selected_sex)
   })
   
   preinstalled_targetvalues_available <- reactive({
@@ -1031,7 +1079,7 @@ server <- function(input, output, session) {
     
     return(dataset)
   })
-  
+
   get_alldata_file <- reactive({
     
     if(input$show_table && input$submit) {
@@ -1063,7 +1111,7 @@ server <- function(input, output, session) {
     
     dat <- reflim_data()
     validate(need(nrow(dat) > 39,
-                  "(reflim) n = 0. The absolute minimum for reference limit estimation is 40."))
+                  paste0("(reflim) n = ", nrow(dat), ". The absolute minimum for reference limit estimation is 40.")))
     
     if (input$check_target == FALSE && input$check_targetvalues == FALSE && input$check_refineR == FALSE) {
       reflim_text <- reflim(dat[,4], n.min = input$nmin, plot.all = FALSE, plot.it = FALSE)
@@ -1245,7 +1293,8 @@ server <- function(input, output, session) {
     tree_minsplit <- as.numeric(input$tree_window_minsplit)
     
     tree_cp <- 0.01
-    tree_formula <- reformulate(tree_input$predictors, response = tree_input$response_name)
+    quoted_response_name <- deparse(as.name(tree_input$response_name), backtick = TRUE)
+    tree_formula <- reformulate(tree_input$predictors, response = quoted_response_name)
     
     rpart(
       tree_formula,
@@ -1527,6 +1576,27 @@ server <- function(input, output, session) {
     }
     max(0, 2 - floor(log10(scale.ref)))
   }
+
+  mclust_plot_values <- function(x) {
+    x <- suppressWarnings(as.numeric(x))
+    x <- x[is.finite(x) & x > 0]
+
+    validate(need(
+      length(x) >= 2 && length(unique(x)) >= 2,
+      "No usable data available for mclust. At least two different positive values are required."
+    ))
+
+    iqr_value <- IQR(x)
+    if (is.finite(iqr_value)) {
+      trimmed_x <- x[x < (median(x) + 6 * iqr_value)]
+      validate(need(
+        length(trimmed_x) >= 2 && length(unique(trimmed_x)) >= 2,
+        "Not enough usable data remain for mclust after removing extreme values."
+      ))
+    }
+
+    x
+  }
   
   output$plotmclust <- renderPlot({ #Tab:mclust
     
@@ -1540,9 +1610,10 @@ server <- function(input, output, session) {
     
     withProgress(message = "mclust Calculation …", {
       dat <- reflim_data()
+      values <- mclust_plot_values(dat[, 4])
       n_cluster <- if (input$auto_cluster) NULL else input$n_cluster
-      plot_digits <- mclust_plot_digits(dat[, 4])
-      lab_mclust(dat[, 4], lognormal = lognormal_value, model = input$model_name, n.cluster = n_cluster, remove.extremes = T, digits = plot_digits)
+      plot_digits <- mclust_plot_digits(values)
+      lab_mclust(values, lognormal = lognormal_value, model = input$model_name, n.cluster = n_cluster, remove.extremes = T, digits = plot_digits)
     })
   })
   
@@ -1558,9 +1629,10 @@ server <- function(input, output, session) {
     
     withProgress(message = "mclust Calculation …", {
       dat <- reflim_data()
+      values <- mclust_plot_values(dat[, 4])
       n_cluster <- if (input$auto_cluster) NULL else input$n_cluster
-      plot_digits <- mclust_plot_digits(dat[, 4])
-      lab_mclust(dat[, 4], lognormal = lognormal_value, model = input$model_name, n.cluster = n_cluster, remove.extremes = T, plot.bic = T, digits = plot_digits)
+      plot_digits <- mclust_plot_digits(values)
+      lab_mclust(values, lognormal = lognormal_value, model = input$model_name, n.cluster = n_cluster, remove.extremes = T, plot.bic = T, digits = plot_digits)
     })
   })
   
@@ -1568,12 +1640,29 @@ server <- function(input, output, session) {
 
     dat <- reflim_data()
     parameter_name <- parameter_display()
+    age <- suppressWarnings(as.numeric(dat[, 2]))
+    value <- suppressWarnings(as.numeric(dat[, 4]))
+    complete_rows <- is.finite(age) & is.finite(value)
+
+    validate(need(
+      any(complete_rows),
+      "No data available for the selected filters."
+    ))
+
+    dat <- dat[complete_rows, , drop = FALSE]
+    dat[, 2] <- age[complete_rows]
+    dat[, 4] <- value[complete_rows]
     colors <- ifelse(dat[, 3] == "f", "indianred", "cornflowerblue")
     pchs <- ifelse(dat[, 3] == "f", 17, 19)
     plot(dat[,4] ~ dat[,2], pch = pchs, cex = 1, col = colors, xlab = "Age", ylab = parameter_name)
 
     unique_levels <- levels(factor(dat[, 3]))
-    legend("topright", legend = unique_levels, pch = c(17, 19)[1:length(unique_levels)], col = c("indianred", "cornflowerblue")[1:length(unique_levels)])
+    legend(
+      "topright",
+      legend = unique_levels,
+      pch = ifelse(unique_levels == "f", 17, 19),
+      col = ifelse(unique_levels == "f", "indianred", "cornflowerblue")
+    )
   })
 
   output$plot_statistics <- renderPlot({ #Tab:Statistics
@@ -1709,9 +1798,14 @@ server <- function(input, output, session) {
   )
   
   output$tree_rpart <- renderPlot({ #Tab:rpart
-    
-    rpart.plot::rpart.plot(build_rpart(), box.palette = "RdBu", roundint = FALSE,
-                           main = paste("Regression tree:", parameter_display(), "~ Sex + Age"),)
+    tree_fit <- build_rpart()
+    tree_formula <- paste(deparse(stats::formula(tree_fit)), collapse = " ")
+    rpart.plot::rpart.plot(
+      tree_fit,
+      box.palette = "RdBu",
+      roundint = FALSE,
+      main = paste("Regression tree:", tree_formula)
+    )
   })
   
 }
