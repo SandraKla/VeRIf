@@ -119,7 +119,7 @@ rpart_text <- HTML(paste0(
 about_text <- HTML(paste0(
   "<p>VeRIf is an interactive Shiny web application for the verification and evaluation of reference intervals based on routine laboratory data using the R package reflimR. The web application supports medical laboratories in efficiently, transparently, and data-driven reviewing existing reference intervals.</p>",
   br(), "<table class='table table-condensed' style='width: 100%; max-width: 900px;'>",
-  "<tr><td><strong>Version:</strong></td><td>1.0.2</td></tr>",
+  "<tr><td><strong>Version:</strong></td><td>1.0.3</td></tr>",
   "<tr><td><strong>Depends:</strong></td><td>R (&gt;= 4.5.2)</td></tr>",
   "<tr><td><strong>Imports:</strong></td><td>DT, mclust, refineR, reflimR, rhandsontable, readxl, rpart, rpart.plot, shiny, shinycssloaders, shinydashboard</td></tr>",
   "<tr><td><strong>Author:</strong></td><td>Sandra Klawitter</td></tr>",
@@ -367,6 +367,22 @@ ui <- dashboardPage(
                   label = "Univariate model for mclust:",
                   choices = c("Equal variance (one-dimensional)" = "E", "Variable/unqual variance (one-dimensional)" = "V"),
                   selected = "V"
+                )
+              )
+            ),
+
+            fluidRow(
+              column(
+                6,
+                radioButtons(
+                  inputId = "mclust_distribution",
+                  label = "Distribution for mclust:",
+                  choices = c(
+                    "Use distribution from reflimR report" = "report",
+                    "Normal" = "normal",
+                    "Lognormal" = "lognormal"
+                  ),
+                  selected = "report"
                 )
               )
             ),
@@ -1473,8 +1489,6 @@ server <- function(input, output, session) {
         report_upper_target_VeRUS <- c(round(report_target_versus$upper.lim.low, 1), round(report_target_versus$upper.lim.upp, 1))
       }
       
-      lognormal_value <<- report$lognormal
-      
       table_report <- t(data.frame(
         "Sex and Age:" = paste0(converted_sex, " (", input$age_end[1], "-", input$age_end[2], ")"),
         "n:" = nrow(dat),
@@ -1597,6 +1611,28 @@ server <- function(input, output, session) {
 
     x
   }
+
+  mclust_lognormal <- reactive({
+    distribution <- input$mclust_distribution
+    if (is.null(distribution)) {
+      distribution <- "report"
+    }
+
+    switch(
+      distribution,
+      "normal" = FALSE,
+      "lognormal" = TRUE,
+      "report" = {
+        report <- get_data_report()
+        validate(need(
+          length(report$lognormal) == 1 && !is.na(report$lognormal),
+          "The distribution could not be determined from the reflimR report."
+        ))
+        isTRUE(report$lognormal)
+      },
+      FALSE
+    )
+  })
   
   output$plotmclust <- renderPlot({ #Tab:mclust
     
@@ -1613,7 +1649,7 @@ server <- function(input, output, session) {
       values <- mclust_plot_values(dat[, 4])
       n_cluster <- if (input$auto_cluster) NULL else input$n_cluster
       plot_digits <- mclust_plot_digits(values)
-      lab_mclust(values, lognormal = lognormal_value, model = input$model_name, n.cluster = n_cluster, remove.extremes = T, digits = plot_digits)
+      lab_mclust(values, lognormal = mclust_lognormal(), model = input$model_name, n.cluster = n_cluster, remove.extremes = T, digits = plot_digits)
     })
   })
   
@@ -1632,7 +1668,7 @@ server <- function(input, output, session) {
       values <- mclust_plot_values(dat[, 4])
       n_cluster <- if (input$auto_cluster) NULL else input$n_cluster
       plot_digits <- mclust_plot_digits(values)
-      lab_mclust(values, lognormal = lognormal_value, model = input$model_name, n.cluster = n_cluster, remove.extremes = T, plot.bic = T, digits = plot_digits)
+      lab_mclust(values, lognormal = mclust_lognormal(), model = input$model_name, n.cluster = n_cluster, remove.extremes = T, plot.bic = T, digits = plot_digits)
     })
   })
   

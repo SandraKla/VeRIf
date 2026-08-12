@@ -60,7 +60,7 @@ The tabs provide the following functions:
 * **Overview**: Inspect the relationship between age, sex and the selected laboratory parameter.
 * **reflimR**: Estimate a reference interval or verify selected target values with the `reflim()` function. The plot can display equivalence limits (EL) or uncertainty margins (UM).
 * **refineR**: Perform a follow-up indirect reference interval estimation. The resulting limits can be selected in the sidebar and re-verified with *reflimR*.
-* **mclust**: Examine the data with a Gaussian mixture model. The number of clusters can be selected automatically or entered manually.
+* **mclust**: Examine the data with a Gaussian mixture model. The number of clusters can be selected automatically or entered manually, and the distribution can be set to normal, lognormal, or inherited from the reflimR report.
 * **rpart**: Explore additional stratification by age and sex using a regression tree.
 * **zlog**: Display the dataset together with its calculated reference interval and a zlog value for every result.
 
@@ -78,3 +78,8 @@ You are welcome to:
 ## Disclaimer
 
 Only anonymized data may be uploaded to this application. This application is provided “as is” and “as available”, without any express or implied warranties of any kind. No warranty is given regarding the accuracy, completeness, reliability, or timeliness of the results. The results are provided for informational and research purposes only and must not be used for diagnosis, treatment, prevention, or any form of clinical or medical decision-making. This application is not a medical device or medical product and does not replace professional medical advice. To the fullest extent permitted by law, the author disclaims all liability for any direct, indirect, incidental, consequential, or special damages arising from the use of this application or its results. Use of this application is entirely at your own risk.
+
+
+## Publication
+
+Hoffmann, Georg & Trulson, Inga & Adler, Jakob & Klawitter, Sandra & Holdenrieder, Stefan & Klawonn, Frank. (2026). Indirect methods for the verification of reference intervals in laboratory medicine. Critical Reviews in Clinical Laboratory Sciences. 1-17. 10.1080/10408363.2026.2687513. 
