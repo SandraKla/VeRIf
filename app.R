@@ -119,7 +119,7 @@ rpart_text <- HTML(paste0(
 about_text <- HTML(paste0(
   "<p>VeRIf is an interactive Shiny web application for the verification and evaluation of reference intervals based on routine laboratory data using the R package reflimR. The web application supports medical laboratories in efficiently, transparently, and data-driven reviewing existing reference intervals.</p>",
   br(), "<table class='table table-condensed' style='width: 100%; max-width: 900px;'>",
-  "<tr><td><strong>Version:</strong></td><td>1.0.3</td></tr>",
+  "<tr><td><strong>Version:</strong></td><td>1.0.3.1</td></tr>",
   "<tr><td><strong>Depends:</strong></td><td>R (&gt;= 4.5.2)</td></tr>",
   "<tr><td><strong>Imports:</strong></td><td>DT, mclust, refineR, reflimR, rhandsontable, readxl, rpart, rpart.plot, shiny, shinycssloaders, shinydashboard</td></tr>",
   "<tr><td><strong>Author:</strong></td><td>Sandra Klawitter</td></tr>",
@@ -1840,7 +1840,16 @@ server <- function(input, output, session) {
       tree_fit,
       box.palette = "RdBu",
       roundint = FALSE,
-      main = paste("Regression tree:", tree_formula)
+      # Forced yes/no labels fail in rpart.plot for trees without splits.
+      yesno = if (nrow(tree_fit$frame) > 1L) 2 else 0,
+      main = paste("Regression tree:", tree_formula),
+      
+      node.fun = function(x, labs, digits, varlen) {
+        paste0(
+          round(100 * x$frame$n / x$frame$n[1]),
+          "%"
+        )
+      }
     )
   })
   
