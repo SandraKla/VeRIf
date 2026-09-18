@@ -82,14 +82,9 @@ dataset_original <- reflimR::livertests
 ####################################### Texts #####################################################
 
 data_text <- HTML(paste0(
-  "This Shiny App is based on the package ", a("reflimR", href = "https://cran.r-project.org/web/packages/reflimR/index.html"), 
-  " for the estimation of reference limits from routine laboratory results:", br(), br(), 
-  "These columns should be used for new data: Age: Age in years; Sex: m for male and f for female; Category (optional): Name of the category to filter the data;
-  Value: Column name is the analyte name, values are the laboratory measures. Laboratory values can start in the third column when no Category column is supplied; the columns can be in any order. The data from *livertests* serves as a template.
-  To load new data, the data should be in CSV format with values separated by semicolons (;), and decimal numbers should use a comma (,) as the decimal separator. The first row should contain column headers.
-  Alternatively, the data can be loaded into the editable table using the copy-and-paste function or with .xlsx.", br(), br(),
-  "On the left side, the sidebar allows you to select the laboratory parameter, category, age and gender group. 
-  In the “Target Values” section, you can load target values from targetvalues, load reference intervals estimated with refineR, or manually enter custom values."
+  "Upload a CSV or Excel (.xlsx) file with column headers. CSV files must use semicolons (;) between values and commas (,) for decimals.", br(), br(),
+  "Include age in years, sex, and at least one laboratory parameter (use the analyte name as its column header). Columns may be in any order. After upload, check the age, sex and optional category column assignments and the female/male values. Select a category column to define groups, or None (all rows) to assign all rows to All.", br(), br(),
+  "Alternatively, enter or paste values into the editable table. Use the sidebar to select the laboratory parameter, category, sex and age range."
 ))
 reflim_text <- HTML(paste0(
   "These tab displays the corresponding plot and the outputs of the reflim() function, providing an estimation of new reference intervals or a verification of the selected target values. 
@@ -119,7 +114,7 @@ rpart_text <- HTML(paste0(
 about_text <- HTML(paste0(
   "<p>VeRIf is an interactive Shiny web application for the verification and evaluation of reference intervals based on routine laboratory data using the R package reflimR. The web application supports medical laboratories in efficiently, transparently, and data-driven reviewing existing reference intervals.</p>",
   br(), "<table class='table table-condensed' style='width: 100%; max-width: 900px;'>",
-  "<tr><td><strong>Version:</strong></td><td>1.0.3.1</td></tr>",
+  "<tr><td><strong>Version:</strong></td><td>1.0.4</td></tr>",
   "<tr><td><strong>Depends:</strong></td><td>R (&gt;= 4.5.2)</td></tr>",
   "<tr><td><strong>Imports:</strong></td><td>DT, mclust, refineR, reflimR, rhandsontable, readxl, rpart, rpart.plot, shiny, shinycssloaders, shinydashboard</td></tr>",
   "<tr><td><strong>Author:</strong></td><td>Sandra Klawitter</td></tr>",
@@ -246,6 +241,7 @@ ui <- dashboardPage(
     fluidRow(
       
       tabsetPanel( 
+        id = "analysis_tab",
         tabPanel("Input", 
                  icon = icon("upload"),
                  
@@ -256,11 +252,12 @@ ui <- dashboardPage(
                    p(data_text),
                    
                    fluidRow(
-                     column(6, checkboxInput("show_table", tags$b("Show and use editable table for upload. Please click Submit!"), value = FALSE)),
+                     column(6, checkboxInput("show_table", tags$b("Editable table"), value = FALSE)),
                      column(6, actionButton("submit", "Submit"))
                    ),
                     conditionalPanel(
                       condition = "input.show_table == true",
+                      helpText("Enter or paste values into the existing columns (Sex: f = female, m = male). Click Submit after adding or changing data to use the table for analysis."),
                       withSpinner(rHandsontableOutput("editable_table"))
                     ), hr(),
                     
@@ -445,6 +442,7 @@ ui <- dashboardPage(
         solidHeader = TRUE,
         
         tabsetPanel(
+          id = "results_tab",
           tabPanel(
             "reflimR Results",
             withSpinner(DT::dataTableOutput("table_report")), hr(),
@@ -469,6 +467,13 @@ server <- function(input, output, session) {
   
   options(shiny.sanitize.errors = TRUE)
   options(warn = -1)
+
+  observeEvent(input$analysis_tab, {
+    if (input$analysis_tab %in% c("reflimR", "refineR")) {
+      updateTabsetPanel(session, "results_tab",
+                       selected = paste(input$analysis_tab, "Results"))
+    }
+  })
 
   updateInputDisabled <- function(input_id, disabled) {
     session$sendCustomMessage(
@@ -501,7 +506,8 @@ server <- function(input, output, session) {
   
   output$dataset_file <- renderUI({
     input$reset ## Create a dependency with the reset button
-    fileInput('dataset_file1', label = NULL,  multiple = FALSE)
+    fileInput('dataset_file1', label = 'Upload CSV or Excel (.xlsx)',
+              multiple = FALSE, accept = c('.csv', '.xlsx'), buttonLabel = 'Choose file')
   })
 
   normalize_upload_value <- function(x) {
@@ -628,6 +634,18 @@ server <- function(input, output, session) {
     dataset
   })
 
+  selected_upload_category <- function(dataset, age_column, sex_column) {
+    available_columns <- setdiff(names(dataset), c(age_column, sex_column))
+    selected <- input$upload_category_column
+    if (!is.null(selected) && selected %in% c("", available_columns)) {
+      return(if (nzchar(selected)) selected else NULL)
+    }
+    matches <- available_columns[
+      normalize_upload_value(available_columns) %in% c("category", "kategorie")
+    ]
+    if (length(matches)) matches[1] else NULL
+  }
+
   output$upload_mapping_ui <- renderUI({
     if (input$show_table || is.null(dataset_input())) {
       return(NULL)
@@ -662,6 +680,8 @@ server <- function(input, output, session) {
       guessed_sex_column
     }
     
+    category_column <- selected_upload_category(dataset, selected_age_column, selected_sex_column)
+
     sex_values <- unique(as.character(dataset[[selected_sex_column]]))
     sex_values <- sex_values[!is.na(sex_values) & nzchar(trimws(sex_values))]
     
@@ -709,6 +729,15 @@ server <- function(input, output, session) {
         column(
           6,
           selectInput(
+            "upload_category_column",
+            "Category column:",
+            choices = c("None (all rows)" = "", setdiff(column_names, c(selected_age_column, selected_sex_column))),
+            selected = if (is.null(category_column)) "" else category_column
+          )
+        ),
+        column(
+          3,
+          selectInput(
             "upload_female_value",
             "Value for female:",
             choices = c("Not present" = "", sex_values),
@@ -716,7 +745,7 @@ server <- function(input, output, session) {
           )
         ),
         column(
-          6,
+          3,
           selectInput(
             "upload_male_value",
             "Value for male:",
@@ -758,17 +787,13 @@ server <- function(input, output, session) {
     validate(need(!is.null(sex_column), "Please choose the sex column."))
     validate(need(age_column != sex_column, "Age column and sex column must be different."))
     
-    category_columns <- setdiff(
-      names(dataset)[normalize_upload_value(names(dataset)) %in% c("category", "kategorie")],
-      c(age_column, sex_column)
-    )
-    category_column <- if (length(category_columns)) category_columns[1] else NULL
+    category_column <- selected_upload_category(dataset, age_column, sex_column)
     
     analyte_columns <- setdiff(names(dataset), c(category_column, age_column, sex_column))
     
     validate(need(
       length(analyte_columns) > 0,
-      "Please choose age and sex columns so that at least one laboratory parameter remains."
+      "Please choose age, sex and category columns so that at least one laboratory parameter remains."
     ))
     
     sex_values <- dataset[[sex_column]]
@@ -1207,6 +1232,7 @@ server <- function(input, output, session) {
     input$show_table,
     input$upload_age_column,
     input$upload_sex_column,
+    input$upload_category_column,
     input$upload_female_value,
     input$upload_male_value
   ), {
@@ -1336,6 +1362,10 @@ server <- function(input, output, session) {
         "(reflim) n < 40 after truncation. The absolute minimum for reference limit estimation is 40."))
     
     if(input$lambda_type == "reflimR"){
+      validate(need(
+        is.logical(report$lognormal) && length(report$lognormal) == 1L && !is.na(report$lognormal),
+        "(reflim) The distribution could not be determined. Please check the selected data and settings."
+      ))
       if(report$lognormal){
         lambda <- 0
       } else{
@@ -1453,6 +1483,10 @@ server <- function(input, output, session) {
     
     report <- get_data_report()
     dat <- reflim_data()
+    validate(need(
+      length(report$limits) >= 1L,
+      "(reflim) No reference limits are available. Please check the selected data and settings."
+    ))
     if (!is.na(report$limits[1])) {
       parameter_name <- parameter_display()
       converted_sex <- switch(input$sex,
@@ -1462,6 +1496,10 @@ server <- function(input, output, session) {
       
       
       if(input$lambda_type == "reflimR"){
+        validate(need(
+          is.logical(report$lognormal) && length(report$lognormal) == 1L && !is.na(report$lognormal),
+          "(reflim) The distribution could not be determined. Please check the selected data and settings."
+        ))
         if(report$lognormal){
           lambda <- 0
         } else{
@@ -1531,6 +1569,7 @@ server <- function(input, output, session) {
     input$show_table,
     input$upload_age_column,
     input$upload_sex_column,
+    input$upload_category_column,
     input$upload_female_value,
     input$upload_male_value
   ), { 
@@ -1712,16 +1751,25 @@ server <- function(input, output, session) {
       hist_data_w <- subset(dat, Sex == "f", select = Age)
       hist_data_m <- subset(dat, Sex == "m", select = Age)
 
-      hist_w <- hist(hist_data_w$Age, breaks = seq(min(dat[,2]) - 1,max(dat[,2]),by = 1))$counts
-      hist_m <- hist(hist_data_m$Age, breaks = seq(min(dat[,2]) - 1,max(dat[,2]),by = 1))$counts
+      hist_w <- hist(hist_data_w$Age, breaks = seq(min(dat[,2]) - 1,max(dat[,2]),by = 1), plot = FALSE)$counts
+      hist_m <- hist(hist_data_m$Age, breaks = seq(min(dat[,2]) - 1,max(dat[,2]),by = 1), plot = FALSE)$counts
+      count_max <- max(c(hist_m, hist_w), 1)
 
-      barplot(rbind(hist_m,hist_w), col = c("cornflowerblue","indianred"),
-              names.arg = seq(min(dat[,2]), max(dat[,2]), by = 1), xlab = "Age", las = 1, beside = TRUE, ylab = "Number of data")
+      bar_positions <- barplot(rbind(hist_m,hist_w), col = c("cornflowerblue","indianred"),
+              names.arg = seq(min(dat[,2]), max(dat[,2]), by = 1), xlab = "Age", las = 1, beside = TRUE, ylab = "Number of data",
+              ylim = c(0, count_max * 1.5))
       abline(h = 0)
-      legend("topright", legend = c(paste0("m: ", nrow(hist_data_m)), paste0("f: ", nrow(hist_data_w))), col = c("cornflowerblue","indianred"), pch = c(19, 19))
+      legend("topright", inset = c(0, -0.08), xpd = NA,
+             legend = c(paste0("m: ", nrow(hist_data_m)), paste0("f: ", nrow(hist_data_w))),
+             col = c("cornflowerblue","indianred"), pch = c(19, 19))
 
-      par(new = TRUE)
-      boxplot(dat[,2], horizontal = TRUE, axes = FALSE, col = rgb(0, 0, 0, alpha = 0.15))
+      # Align ages with the grouped bars and draw in the existing coordinates.
+      age_centers <- colMeans(bar_positions)
+      age_spacing <- if (length(age_centers) > 1L) diff(age_centers)[1] else 3
+      boxplot_ages <- age_centers[1] + (dat[, 2] - min(dat[, 2])) * age_spacing
+      boxplot(boxplot_ages, horizontal = TRUE, add = TRUE, axes = FALSE,
+              at = count_max * 1.2, boxwex = count_max * 0.08,
+              border = "gray25", col = "gray85")
     }
 
     if (!(nrow(dat)) == 0) {
