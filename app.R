@@ -279,7 +279,22 @@ ui <- dashboardPage(
 
                    p(scatterplot_text),
                    plotOutput("scatterplot", height = "350px"),
-                   plotOutput("plot_statistics", height = "700px")
+                   plotOutput("plot_statistics", height = "350px"),
+                   fluidRow(
+                     column(6, selectInput(
+                       "overview_age_group_width", "Boxplot age groups:",
+                       choices = c("Automatic" = "auto", "1 year" = "1", "2 years" = "2",
+                                   "5 years" = "5", "10 years" = "10", "20 years" = "20"),
+                       selected = "auto"
+                     )),
+                     column(6, selectInput(
+                       "overview_boxplot_scale", "Boxplot Y-axis:",
+                       choices = c("Linear" = "linear", "Logarithmic" = "log"),
+                       selected = "linear"
+                     ))
+                   ),
+                   helpText("Age groups include the lower limit, e.g. 20-<25 means 20 to under 25 years. Use a logarithmic scale to see small values alongside large outliers."),
+                   plotOutput("plot_age_boxplot", height = "400px")
                  )
         ),
         
@@ -418,7 +433,7 @@ ui <- dashboardPage(
                     solidHeader = TRUE,
 
                     p(zlog_text),
-                    DT::dataTableOutput("table_zlog",  height = "700px")
+                    withSpinner(DT::dataTableOutput("table_zlog", height = "700px"))
                   )
         ),
         
@@ -1742,21 +1757,29 @@ server <- function(input, output, session) {
 
   output$plot_statistics <- renderPlot({ #Tab:Statistics
 
-    par(mfrow = c(2,1))
-
     dat <- reflim_data()
-    ylab_ <- parameter_display()
 
     if (!(nrow(dat)) == 0) {
       hist_data_w <- subset(dat, Sex == "f", select = Age)
       hist_data_m <- subset(dat, Sex == "m", select = Age)
 
-      hist_w <- hist(hist_data_w$Age, breaks = seq(min(dat[,2]) - 1,max(dat[,2]),by = 1), plot = FALSE)$counts
-      hist_m <- hist(hist_data_m$Age, breaks = seq(min(dat[,2]) - 1,max(dat[,2]),by = 1), plot = FALSE)$counts
+      # Whole-year bins [age, age + 1) also cover fractional ages.
+      age_breaks <- seq(floor(min(dat$Age)), floor(max(dat$Age)) + 1, by = 1)
+      age_labels <- head(age_breaks, -1)
+      hist_w <- if (nrow(hist_data_w) > 0) {
+        hist(hist_data_w$Age, breaks = age_breaks, right = FALSE, plot = FALSE)$counts
+      } else {
+        integer(length(age_labels))
+      }
+      hist_m <- if (nrow(hist_data_m) > 0) {
+        hist(hist_data_m$Age, breaks = age_breaks, right = FALSE, plot = FALSE)$counts
+      } else {
+        integer(length(age_labels))
+      }
       count_max <- max(c(hist_m, hist_w), 1)
 
       bar_positions <- barplot(rbind(hist_m,hist_w), col = c("cornflowerblue","indianred"),
-              names.arg = seq(min(dat[,2]), max(dat[,2]), by = 1), xlab = "Age", las = 1, beside = TRUE, ylab = "Number of data",
+              names.arg = age_labels, xlab = "Age", las = 1, beside = TRUE, ylab = "Number of data",
               ylim = c(0, count_max * 1.5))
       abline(h = 0)
       legend("topright", inset = c(0, -0.08), xpd = NA,
@@ -1766,26 +1789,64 @@ server <- function(input, output, session) {
       # Align ages with the grouped bars and draw in the existing coordinates.
       age_centers <- colMeans(bar_positions)
       age_spacing <- if (length(age_centers) > 1L) diff(age_centers)[1] else 3
-      boxplot_ages <- age_centers[1] + (dat[, 2] - min(dat[, 2])) * age_spacing
+      boxplot_ages <- age_centers[1] + (dat$Age - age_labels[1]) * age_spacing
       boxplot(boxplot_ages, horizontal = TRUE, add = TRUE, axes = FALSE,
               at = count_max * 1.2, boxwex = count_max * 0.08,
               border = "gray25", col = "gray85")
     }
 
-    if (!(nrow(dat)) == 0) {
+  })
 
-      if (input$sex == "m") {
-        boxplot(dat[,4]~interaction(dat[,3], dat[,2]), xlab = "Age",
-                ylab = ylab_, col = "cornflowerblue", las = 2)
-      }
-      else if (input$sex == "f") {
-        boxplot(dat[,4]~interaction(dat[,3], dat[,2]), xlab = "Age",
-                ylab = ylab_, col = "indianred", las = 2)
-      } else{
-        boxplot(dat[,4]~interaction(dat[,3], dat[,2]), xlab = "Age",
-                ylab = ylab_, col = c("indianred", "cornflowerblue"), las = 2)
-      }
+  output$plot_age_boxplot <- renderPlot({ #Tab:Overview
+    dat <- reflim_data()
+    values <- suppressWarnings(as.numeric(dat[, 4]))
+    usable_rows <- is.finite(dat$Age) & is.finite(values) & dat$Sex %in% c("m", "f")
+    dat <- dat[usable_rows, , drop = FALSE]
+    values <- values[usable_rows]
+    validate(need(length(values) > 0, "No data available for the selected filters."))
+
+    par(mar = c(4.5, 4.5, 2.5, 1))
+    group_width <- input$overview_age_group_width
+    if (is.null(group_width) || group_width == "auto") {
+      max_age_groups <- max(6, min(12, floor(par("pin")[1] / 0.6)))
+      candidate_widths <- c(1, 2, 5, 10, 20)
+      group_counts <- floor(max(dat$Age) / candidate_widths) -
+        floor(min(dat$Age) / candidate_widths) + 1
+      group_width <- candidate_widths[which(group_counts <= max_age_groups)[1]]
+    } else {
+      group_width <- as.numeric(group_width)
     }
+
+    age_starts <- seq(floor(min(dat$Age) / group_width) * group_width,
+                      floor(max(dat$Age) / group_width) * group_width, by = group_width)
+    age_labels <- paste0(age_starts, "-<", age_starts + group_width)
+    age_group <- factor(floor(dat$Age / group_width) * group_width, levels = age_starts)
+    sex_levels <- c("m", "f")[c("m", "f") %in% dat$Sex]
+    sex_group <- factor(dat$Sex, levels = sex_levels)
+    sex_colors <- c(m = "cornflowerblue", f = "indianred")[sex_levels]
+    grouped_values <- split(values, interaction(sex_group, age_group, drop = FALSE))
+
+    use_log <- identical(input$overview_boxplot_scale, "log")
+    validate(need(!use_log || all(values > 0),
+                  "Logarithmic scale requires positive values. Choose Linear for data containing zero or negative values."))
+
+    # Keep male/female boxes beside each other, with one label per age interval.
+    offsets <- if (length(sex_levels) == 2) c(-0.18, 0.18) else 0
+    box_positions <- rep(seq_along(age_starts), each = length(sex_levels)) +
+      rep(offsets, times = length(age_starts))
+    boxplot(grouped_values, at = box_positions,
+            boxwex = if (length(sex_levels) == 2) 0.32 else 0.6,
+            col = rep(sex_colors, times = length(age_starts)),
+            border = "gray30", outpch = 16, outcex = 0.45,
+            outcol = grDevices::adjustcolor("gray30", alpha.f = 0.4),
+            xaxt = "n", las = 1, xlim = c(0.5, length(age_starts) + 0.5),
+            xlab = "Age group (years)",
+            ylab = paste0(parameter_display(), if (use_log) " (log scale)" else ""),
+            log = if (use_log) "y" else "")
+    axis(1, at = seq_along(age_starts), labels = age_labels, cex.axis = 0.8)
+    mtext(paste0(group_width, "-year age groups"), side = 3, adj = 0, line = 0.5, cex = 0.85)
+    legend("topright", inset = c(0, -0.12), xpd = NA,
+           legend = sex_levels, fill = sex_colors, horiz = TRUE, bty = "n")
   })
   
   output$table_zlog <- DT::renderDataTable({ #Tab:zlog
@@ -1806,6 +1867,7 @@ server <- function(input, output, session) {
                   options = list(dom = 'Blfrtip', pageLength = 15, buttons = c('copy', 'csv', 'pdf', 'print')),
                   caption = htmltools::tags$caption(style = 'caption-side: bottom; text-align: center;',
                                                     'Table: Dataset with the zlog values')) %>%
+      DT::formatRound(columns = "Age", digits = 3) %>%
       DT::formatStyle(columns = "zlog",
                       color = styleEqual(reflim_data[,6], highzlogvalues(c(reflim_data[,6]))),
                       backgroundColor = styleEqual(reflim_data[,6], zlogcolor(c(reflim_data[,6])))) %>%
