@@ -577,12 +577,13 @@ ri_hist_VeRUS <- function(x, lognormal, stats, limits, perc.norm,
 
 #' Computes the zlog value of x given the lower und upper reference limits L and U
 #'
-#' @param x value
+#' @param x Numeric vector of values
 #' @param L lower reference limit
 #' @param U upper reference limit
 zlog <- function(x,L=0,U=0){
-  if (is.na(x) | is.na(L) | is.na(U) | L<=0 | U<=0 | U<=L){
-    return(NA)
+  if (length(L) != 1L || length(U) != 1L ||
+      !is.finite(L) || !is.finite(U) || L <= 0 || U <= L) {
+    return(rep(NA_real_, length(x)))
   }
   
   logl <- log(L)
@@ -590,7 +591,9 @@ zlog <- function(x,L=0,U=0){
   mu.log <- (logl+logu)/2
   sigma.log <- (logu - logl)/(3.919928)
   
-  return((log(x)-mu.log)/sigma.log)
+  result <- (log(x)-mu.log)/sigma.log
+  result[is.na(x)] <- NA_real_
+  return(result)
 }
 
 #' Round numeric values from a dataframe
@@ -615,15 +618,7 @@ zlogcolor <- function(x, hex = TRUE,
   R = round(a[1] + w[1] / ((1 + t[1] * exp(-s[1] * ( x - m[1]))) ^ (1 / t[1])))
   B = round(a[1] + w[1] / ((1 + t[1] * exp(-s[1] * (-x - m[1]))) ^ (1 / t[1])))
   
-  G = sapply(x, function(x) ifelse(x < 0,
-                                   round(a[2] + w[2] / ((1 + t[2] * exp(-s[2] * ( x - m[2]))) ^ (1 / t[2]))),
-                                   round(a[2] + w[2] / ((1 + t[2] * exp(-s[2] * (-x - m[2]))) ^ (1 / t[2])))))
-  
-  # if(x < 0) {
-  #   G = round(a[2] + w[2] / ((1 + t[2] * exp(-s[2] * ( x - m[2]))) ^ (1 / t[2])))
-  # } else {
-  #   G = round(a[2] + w[2] / ((1 + t[2] * exp(-s[2] * (-x - m[2]))) ^ (1 / t[2])))
-  # }
+  G = round(a[2] + w[2] / ((1 + t[2] * exp(-s[2] * (-abs(x) - m[2]))) ^ (1 / t[2])))
   
   R[is.na(R)] <- 255
   B[is.na(B)] <- 255
@@ -645,18 +640,13 @@ zlogcolor <- function(x, hex = TRUE,
 highzlogvalues <- function(x, hex = TRUE, threshold = 8, background = FALSE){
   
   if(!background){
-    G = sapply(x, function(x) ifelse(x < -threshold, 255, 0))
-    R = sapply(x, function(x) ifelse(x < -threshold, 255, 0))
-    B = sapply(x, function(x) ifelse(x < -threshold, 255, 0))
+    G = ifelse(x < -threshold, 255, 0)
   } else{
-    G = sapply(x, function(x) ifelse(x > threshold, 192, 255))
-    R = sapply(x, function(x) ifelse(x > threshold, 192, 255))
-    B = sapply(x, function(x) ifelse(x > threshold, 192, 255))
+    G = ifelse(x > threshold, 192, 255)
   }
-  
-  R[is.na(R)] <- 0
-  B[is.na(B)] <- 0
+
   G[is.na(G)] <- 0
+  R = B = G
   
   ifelse (hex,
           return(rgb(R, G, B, max = 255)),

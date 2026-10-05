@@ -119,6 +119,7 @@ about_text <- HTML(paste0(
   "<tr><td><strong>Imports:</strong></td><td>DT, mclust, refineR, reflimR, rhandsontable, readxl, rpart, rpart.plot, shiny, shinycssloaders, shinydashboard</td></tr>",
   "<tr><td><strong>Author:</strong></td><td>Sandra Klawitter</td></tr>",
   "<tr><td><strong>E-Mail:</strong></td><td>sandra.klawitter@trillium.de</td></tr>",
+  "<tr><td><strong>BugReports:</strong></td><td><a href='https://github.com/SandraKla/VeRIf-workshop'>https://github.com/SandraKla/VeRIf-workshop</a></td></tr>",
   "<tr><td><strong>BugReports:</strong></td><td><a href='https://github.com/SandraKla/VeRIf/issues'>https://github.com/SandraKla/VeRIf/issues</a></td></tr>",
   "<tr><td><strong>R-Code:</strong></td><td><a href='https://github.com/SandraKla/VeRIf'>https://github.com/SandraKla/VeRIf</a></td></tr>",
   "</table>", br(),
@@ -1163,6 +1164,16 @@ server <- function(input, output, session) {
     return(dataset)
   })
   
+  # Estimated limits and distribution do not depend on verification targets.
+  # zlog and mclust must remain usable when refineR targets are not ready.
+  get_reflim_report <- reactive({
+    dat <- reflim_data()
+    validate(need(nrow(dat) > 39,
+                  paste0("(reflim) n = ", nrow(dat), ". The absolute minimum for reference limit estimation is 40.")))
+
+    reflim(dat[, 4], n.min = input$nmin, plot.all = FALSE, plot.it = FALSE)
+  })
+
   get_data_report <- reactive({
     
     dat <- reflim_data()
@@ -1170,7 +1181,7 @@ server <- function(input, output, session) {
                   paste0("(reflim) n = ", nrow(dat), ". The absolute minimum for reference limit estimation is 40.")))
     
     if (input$check_target == FALSE && input$check_targetvalues == FALSE && input$check_refineR == FALSE) {
-      reflim_text <- reflim(dat[,4], n.min = input$nmin, plot.all = FALSE, plot.it = FALSE)
+      reflim_text <- get_reflim_report()
     }
     
     if (input$check_target) {
@@ -1677,7 +1688,7 @@ server <- function(input, output, session) {
       "normal" = FALSE,
       "lognormal" = TRUE,
       "report" = {
-        report <- get_data_report()
+        report <- get_reflim_report()
         validate(need(
           length(report$lognormal) == 1 && !is.na(report$lognormal),
           "The distribution could not be determined from the reflimR report."
@@ -1849,32 +1860,44 @@ server <- function(input, output, session) {
            legend = sex_levels, fill = sex_colors, horiz = TRUE, bty = "n")
   })
   
-  output$table_zlog <- DT::renderDataTable({ #Tab:zlog
-
+  zlog_table_data <- reactive({
     dat <- reflim_data()
-    report <- get_data_report()
+    report <- get_reflim_report()
+    limits <- report$limits[1:2]
+    validate(need(
+      length(limits) == 2L && all(is.finite(limits)) &&
+        limits[1] > 0 && limits[2] > limits[1],
+      "(zlog) No valid positive reference limits are available from reflimR. Please check the selected data and settings."
+    ))
 
-    zlog_results <- numeric(nrow(dat))
-    for (i in 1:nrow(dat)) {
-      zlog_results[i] <- round_df(zlog(dat[i, 4], report$limits[1], report$limits[2]), 2)
-    }
-
-    reflim_data <- cbind(dat, "RI" = paste0(report$limits[1], " - " , report$limits[2]), "zlog" = zlog_results)
-
-    options(htmlwidgets.TOJSON_ARGS = list(na = 'string'))
-
-    DT::datatable(reflim_data, rownames = FALSE, extensions = 'Buttons', class = 'cell-border',
-                  options = list(dom = 'Blfrtip', pageLength = 15, buttons = c('copy', 'csv', 'pdf', 'print')),
-                  caption = htmltools::tags$caption(style = 'caption-side: bottom; text-align: center;',
-                                                    'Table: Dataset with the zlog values')) %>%
-      DT::formatRound(columns = "Age", digits = 3) %>%
-      DT::formatStyle(columns = "zlog",
-                      color = styleEqual(reflim_data[,6], highzlogvalues(c(reflim_data[,6]))),
-                      backgroundColor = styleEqual(reflim_data[,6], zlogcolor(c(reflim_data[,6])))) %>%
-      DT::formatStyle(columns = colnames(reflim_data)[4],
-                      color = styleEqual(reflim_data[,4], highzlogvalues(c(reflim_data[,6]))),
-                      backgroundColor = styleEqual(reflim_data[,4], zlogcolor(c(reflim_data[,6]))))
+    # Calculate once per data/limit change, not once per displayed cell.
+    zlog_values <- round(zlog(dat[[4]], limits[1], limits[2]), 2)
+    dat$Age <- round(dat$Age, 3)
+    cbind(dat,
+          RI = rep(paste0(limits[1], " - ", limits[2]), nrow(dat)),
+          zlog = zlog_values,
+          .zlog_text_color = highzlogvalues(zlog_values),
+          .zlog_background_color = zlogcolor(zlog_values))
   })
+
+  output$table_zlog <- DT::renderDataTable({ #Tab:zlog
+    DT::datatable(
+      zlog_table_data(), rownames = FALSE, extensions = 'Buttons', class = 'cell-border',
+      options = list(
+        dom = 'Blfrtip', pageLength = 15, deferRender = TRUE,
+        buttons = lapply(c('copy', 'csv', 'pdf', 'print'), function(button) {
+          list(extend = button, exportOptions = list(columns = 0:5))
+        }),
+        # Hidden color columns travel with each server-side page. This avoids
+        # embedding a full-dataset styleEqual lookup in the browser callback.
+        columnDefs = list(list(targets = 6:7, visible = FALSE, searchable = FALSE))
+      ),
+      caption = htmltools::tags$caption(style = 'caption-side: bottom; text-align: center;',
+                                       'Table: Dataset with the zlog values')
+    ) %>%
+      DT::formatStyle(columns = 6, valueColumns = 7, color = DT::styleValue()) %>%
+      DT::formatStyle(columns = 6, valueColumns = 8, backgroundColor = DT::styleValue())
+  }, server = TRUE)
   
   output$download_ritable <- downloadHandler(
     filename = function() {
