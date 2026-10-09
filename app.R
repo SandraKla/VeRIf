@@ -22,7 +22,11 @@
 
 ####################################### Load Script and Example-Dataset ###########################
 
+# Allow CSV and Excel uploads up to 100 MB.
+options(shiny.maxRequestSize = 100 * 1024^2)
+
 source("functions.R")
+source("excel_import.R")
 source("reflimR_loop.R")
 
 ####################################### Libraries #################################################
@@ -102,7 +106,7 @@ mclust_text <- HTML(paste0(
   "Gaussian mixture modelling for the verification of reference intervals."
 ))
 scatterplot_text <- HTML(paste0(
-  "The plots shows the relationship between age, sex and the laboratory value."
+  "The plots show the relationship between age, sex and the laboratory value."
 ))
 zlog_text <- HTML(paste0(
   "zlog values are calculated from the dataset and the calculated reference intervals. The lower reference limits (LL) and upper reference limits (UL) can transform any result x into a zlog value using the following equation:
@@ -114,12 +118,12 @@ rpart_text <- HTML(paste0(
 about_text <- HTML(paste0(
   "<p>VeRIf is an interactive Shiny web application for the verification and evaluation of reference intervals based on routine laboratory data using the R package reflimR. The web application supports medical laboratories in efficiently, transparently, and data-driven reviewing existing reference intervals.</p>",
   br(), "<table class='table table-condensed' style='width: 100%; max-width: 900px;'>",
-  "<tr><td><strong>Version:</strong></td><td>1.0.4</td></tr>",
+  "<tr><td><strong>Version:</strong></td><td>1.0.4.1</td></tr>",
   "<tr><td><strong>Depends:</strong></td><td>R (&gt;= 4.5.2)</td></tr>",
   "<tr><td><strong>Imports:</strong></td><td>DT, mclust, refineR, reflimR, rhandsontable, readxl, rpart, rpart.plot, shiny, shinycssloaders, shinydashboard</td></tr>",
   "<tr><td><strong>Author:</strong></td><td>Sandra Klawitter</td></tr>",
   "<tr><td><strong>E-Mail:</strong></td><td>sandra.klawitter@trillium.de</td></tr>",
-  "<tr><td><strong>BugReports:</strong></td><td><a href='https://github.com/SandraKla/VeRIf-workshop'>https://github.com/SandraKla/VeRIf-workshop</a></td></tr>",
+  "<tr><td><strong>Workshop:</strong></td><td><a href='https://github.com/SandraKla/VeRIf-workshop'>https://github.com/SandraKla/VeRIf-workshop</a></td></tr>",
   "<tr><td><strong>BugReports:</strong></td><td><a href='https://github.com/SandraKla/VeRIf/issues'>https://github.com/SandraKla/VeRIf/issues</a></td></tr>",
   "<tr><td><strong>R-Code:</strong></td><td><a href='https://github.com/SandraKla/VeRIf'>https://github.com/SandraKla/VeRIf</a></td></tr>",
   "</table>", br(),
@@ -620,6 +624,40 @@ server <- function(input, output, session) {
     list(female = female_value, male = male_value)
   }
 
+  excel_import_selection <- reactiveVal(NULL)
+
+  excel_sheets <- reactive({
+    file_info <- dataset_input()
+    req(file_info)
+    if (!grepl("\\.xlsx$", file_info$name, ignore.case = TRUE)) return(NULL)
+    result <- tryCatch(readxl::excel_sheets(file_info$datapath), error = identity)
+    validate(need(!inherits(result, "error"),
+                  "The Excel workbook could not be opened. Please upload a valid, unencrypted XLSX file."))
+    result
+  })
+
+  observeEvent(dataset_input(), {
+    excel_import_selection(NULL)
+    removeModal()
+    if (is.null(dataset_input())) return()
+    sheets <- excel_sheets()
+    if (length(sheets) <= 1L) return()
+    showModal(modalDialog(
+      title = "Select worksheet",
+      helpText(sprintf("The uploaded Excel file contains %d sheets. Choose the sheet to read.", length(sheets))),
+      selectInput("excel_sheet", "Worksheet:", choices = sheets, selected = sheets[1]),
+      footer = actionButton("apply_excel_import", "Read selected sheet"),
+      easyClose = FALSE
+    ))
+  }, ignoreNULL = FALSE, priority = 100)
+
+  observeEvent(input$apply_excel_import, {
+    req(input$excel_sheet %in% excel_sheets())
+    excel_import_selection(list(path = dataset_input()$datapath,
+                                sheet = input$excel_sheet))
+    removeModal()
+  })
+
   uploaded_dataset_raw <- reactive({
     file_info <- dataset_input()
     req(file_info)
@@ -634,7 +672,20 @@ server <- function(input, output, session) {
     if (grepl("\\.csv$", datapath, ignore.case = TRUE)) {
       dataset <- read.csv2(datapath)
     } else {
-      dataset <- as.data.frame(readxl::read_excel(datapath), stringsAsFactors = FALSE)
+      sheets <- excel_sheets()
+      if (length(sheets) == 1L) {
+        sheet <- sheets[1]
+      } else {
+        selection <- excel_import_selection()
+        validate(need(!is.null(selection) && identical(selection$path, datapath) &&
+                        selection$sheet %in% sheets,
+                      "Please choose a worksheet in the selection window."))
+        sheet <- selection$sheet
+      }
+      dataset <- tryCatch(read_excel_dataset(datapath, sheet), error = identity)
+      if (inherits(dataset, "error")) {
+        validate(need(FALSE, paste("Excel import failed:", conditionMessage(dataset))))
+      }
     }
     
     validate(need(
@@ -1254,6 +1305,7 @@ server <- function(input, output, session) {
     input$age_end,
     input$reset,
     input$dataset_file1,
+    excel_import_selection(),
     input$submit,
     input$show_table,
     input$upload_age_column,
@@ -1591,6 +1643,7 @@ server <- function(input, output, session) {
     input$age_end,
     input$reset,
     input$dataset_file1,
+    excel_import_selection(),
     input$submit,
     input$show_table,
     input$upload_age_column,
