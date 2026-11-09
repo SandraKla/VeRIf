@@ -103,9 +103,10 @@ lab_mclust <- function(x, lognormal, remove.extremes,
     res.tab[, 2] <- round(res.tab[, 2], digits)
   }
   
+  y.max <- NULL
   if(plot.it){
     # the plot is made with original values x (not xx!)
-    col = rainbow(9)
+    col = rainbow(max(9L, nrow(res.tab)))
     d <- density(x)
     y.max <- max(d$y) * 1.1
     if(add.boxplot){y.max <- y.max  * 1.4}
@@ -312,6 +313,27 @@ interpretation_VeRUS <- function(limits, targets, lambda){
   return(list(tol.lim = tol.lim, tol.tar = tol.tar,
               col.lim = col.lim, col.tar = col.tar,
               dev.lim = dev.lim))
+}
+
+# Accept decimal commas in mixed CSV/Excel columns without interpreting
+# censored results (e.g. "<5") or other text as measured numeric values.
+parse_numeric_values <- function(x) {
+  if (is.numeric(x)) return(as.numeric(x))
+  values <- chartr(",", ".", trimws(as.character(x)))
+  suppressWarnings(as.numeric(values))
+}
+
+# Keep the original warnings with the report so the results table can show them.
+reflim_with_warnings <- function(...) {
+  warnings <- character()
+  result <- withCallingHandlers(
+    reflimR::reflim(...),
+    warning = function(w) {
+      warnings <<- c(warnings, conditionMessage(w))
+    }
+  )
+  result$warnings <- unique(warnings)
+  result
 }
 
 reflim_VeRUS <- function(x, lognormal = NULL, targets = NULL,
@@ -573,6 +595,27 @@ ri_hist_VeRUS <- function(x, lognormal, stats, limits, perc.norm,
          round(targets[1 : 2], digits), col = "grey")
   }
   return(list(lognormal = lognormal, percent_normal = perc.norm, interpretation = dev.lim))
+}
+
+# Safe, distinct CSV filenames, including on case-insensitive Windows filesystems.
+reference_interval_filenames <- function(analytes) {
+  stems <- gsub("[^[:alnum:]_-]+", "_", analytes)
+  stems <- gsub("^[-_]+|_+$", "", stems)
+  stems[is.na(stems) | !nzchar(stems)] <- "Analyte"
+  reserved <- grepl("^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$", stems, ignore.case = TRUE)
+  stems[reserved] <- paste0("Analyte_", stems[reserved])
+
+  filenames <- character(length(stems))
+  for (i in seq_along(stems)) {
+    candidate <- stems[i]
+    suffix <- 1L
+    while (tolower(paste0(candidate, ".csv")) %in% tolower(filenames)) {
+      candidate <- paste0(stems[i], "_", suffix)
+      suffix <- suffix + 1L
+    }
+    filenames[i] <- paste0(candidate, ".csv")
+  }
+  filenames
 }
 
 #' Computes the zlog value of x given the lower und upper reference limits L and U

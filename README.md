@@ -36,8 +36,8 @@ runApp("app.R")
 
 The package [reflimR](https://cran.r-project.org/web/packages/reflimR/index.html) (≥ 1.1.0), [refineR](https://cran.r-project.org/web/packages/refineR/index.html) (≥ 2.0.0), [mclust](https://cran.r-project.org/web/packages/mclust/index.html) (≥ 6.1.2), [DT](https://cran.r-project.org/web/packages/DT/index.html) (≥ 0.33), [readxl](https://cran.r-project.org/web/packages/readxl/index.html) (≥ 1.4.5), [rhandsontable](https://cran.r-project.org/web/packages/rhandsontable/index.html) (≥ 0.3.8), [rpart](https://cran.r-project.org/web/packages/rpart/index.html) (≥ 4.1.24), [rpart.plot](https://cran.r-project.org/web/packages/rpart.plot/index.html) (≥ 3.1.4), [shinycssloaders](https://cran.r-project.org/web/packages/shinycssloaders/index.html) (≥ 1.1.0) and [shinydashboard](https://cran.r-project.org/web/packages/shinydashboard/index.html) (≥ 0.7.2) are downloaded or imported when starting this app. The used [R](https://www.r-project.org) version must be ≥ 4.5.2.
 
-## Preloaded dataset
-Data from the [UC Irvine Machine Learning Repository](https://archive.ics.uci.edu/ml/datasets/HCV+data) showing *livertests* has been preloaded into this Shiny App. In addition, the corresponding reference intervals are stored in *targetvalues*. The reference interval table has been derived from the data published in the [Clinical Laboratory Diagnostics](https://www.clinical-laboratory-diagnostics.com) by Lothar Thomas, MD.
+## Demo dataset
+The app starts without data. Click **Load demo data** in the *Input* tab to load the *livertests* example from the [UC Irvine Machine Learning Repository](https://archive.ics.uci.edu/ml/datasets/HCV+data). The **Load preinstalled target reference interval** checkbox is only shown while the demo dataset is in use. The corresponding reference intervals are stored in *targetvalues* and have been derived from the data published in the [Clinical Laboratory Diagnostics](https://www.clinical-laboratory-diagnostics.com) by Lothar Thomas, MD. **Reset Input** reloads the app with a fresh session: uploaded data, table edits, analyte labels, units and results are cleared, all settings return to their defaults, and demo data remain unloaded.
 
 ## New data
 These columns should be used for new data:
@@ -49,7 +49,7 @@ These columns should be used for new data:
 
 **File upload:** Choose a CSV or Excel (`.xlsx`) file with column headers. Columns may be in any order; include age, sex and at least one laboratory parameter. CSV files must use semicolons (`;`) between values and commas (`,`) for decimals. After upload, check the age and sex column assignments and map the female/male values. Files are used directly, without clicking **Submit**. Example files: [CSV template](https://github.com/SandraKla/VeRIf/tree/main/www/template.csv) and [Excel template](https://github.com/SandraKla/VeRIf/blob/main/www/template.xlsx).
 
-**Editable table:** Enable **Editable table** and enter or paste values into the existing `Category`, `Age`, `Sex` and `Analyte` columns. Use `f` for female and `m` for male; use one category for all rows if no grouping is needed. Click **Submit** after adding or changing data to apply it. Uncheck **Editable table** to return to the uploaded file or the preloaded example data.
+**Editable table:** Enable **Editable table** and enter or paste values into the existing `Category`, `Age`, `Sex` and `Analyte` columns. Use `f` for female and `m` for male; use one category for all rows if no grouping is needed. Click **Submit** after adding or changing data to apply it. Uncheck **Editable table** to return to the previously selected file or demo dataset, or to an empty input if neither was selected.
 
 ## Usage
 

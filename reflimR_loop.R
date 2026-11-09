@@ -71,31 +71,29 @@ reflim.loop <- function(xx,
     
     # Initialize an empty list to store results
     results <- list()
-    targets_reflim <- targets
     
     # Loop through each column
     for (col_name in names(xx)) {
-        
-        # If targets are provided, extract the corresponding ll and ul
-        if (!is.null(targets)) {
-            target_row <- targets[targets$analyte == col_name, ]
-            
-            # Extract ll and ul from the appropriate columns
-            if (nrow(target_row) > 0) {
-                ll <- target_row[1, 2]  # Lower limit
-                ul <- target_row[1, 3]  # Upper limit
-                targets_reflim <- c(ll, ul) 
-            } else {
-                stop("No target values found for analyte: ", col_name)
+        results[[col_name]] <- tryCatch({
+            targets_reflim <- NULL
+            # If targets are provided, extract the corresponding ll and ul.
+            if (!is.null(targets)) {
+                target_row <- targets[targets$analyte == col_name, ]
+
+                if (nrow(target_row) > 0) {
+                    ll <- target_row[1, 2]
+                    ul <- target_row[1, 3]
+                    targets_reflim <- c(ll, ul)
+                } else {
+                    stop("No target values found for analyte: ", col_name)
+                }
             }
-        } 
-        
-        main <- paste0("Reference Limits for ", col_name)
-        
-        tryCatch({
+
+            main <- paste0("Reference Limits for ", col_name)
+
             # Apply reflim to the column
-            results[[col_name]] <- reflimR::reflim(
-                xx[[col_name]],
+            reflim_with_warnings(
+                parse_numeric_values(xx[[col_name]]),
                 lognormal = lognormal,
                 targets = targets_reflim,
                 perc.trunc = perc.trunc,
@@ -110,8 +108,7 @@ reflim.loop <- function(xx,
         },
         error = function(e) {
             # Store the error message in case of failure
-            results[[col_name]] <-
-                list(error = paste("Error:", e$message))
+            list(error = paste("Error:", conditionMessage(e)))
         })
     }
     
@@ -137,10 +134,13 @@ zlog.loop <- function(xx, reflim_results) {
     
     # Initialize a list to store columns in the desired order
     sorted_results <- list()
+    zlog_names <- tail(make.unique(c(names(xx), paste0(names(xx), "_zlog"))), ncol(xx))
     
     # Loop through each column
-    for (col_name in names(xx)) {
-        tryCatch({
+    for (col_index in seq_along(xx)) {
+        col_name <- names(xx)[col_index]
+        sorted_results[[col_name]] <- xx[[col_index]]
+        zlog_column <- tryCatch({
             # Extract lower and upper limits from reflim_results
             limits <- reflim_results[[col_name]]$limits
             if (is.null(limits))
@@ -149,36 +149,10 @@ zlog.loop <- function(xx, reflim_results) {
             lower.lim <- limits[[1]]
             upper.lim <- limits[[2]]
             
-            # Initialize a vector to store zlog values for this column
-            zlog_column <- numeric(nrow(xx))
-            
-            # Loop through each value in the column
-            for (i in seq_len(nrow(xx))) {
-                tryCatch({
-                    # Apply zlog function for the current value
-                    zlog_column[i] <-
-                        zlog(xx[[col_name]][i], lower.lim, upper.lim)
-                },
-                error = function(e) {
-                    # Handle errors for individual values
-                    zlog_column[i] <- NA
-                    message(
-                        paste(
-                            "Error processing value in column:",
-                            col_name,
-                            "row:",
-                            i,
-                            "-",
-                            e$message
-                        )
-                    )
-                })
-            }
-            
-            # Add the original column and its corresponding _zlog column to the results list
-            sorted_results[[col_name]] <- xx[[col_name]]
-            sorted_results[[paste0(col_name, "_zlog")]] <-
-                zlog_column
+            # Keep original values, but calculate from numeric values. Text such
+            # as "<5" becomes NA instead of leaving an artificial zero behind.
+            numeric_values <- parse_numeric_values(xx[[col_index]])
+            zlog(numeric_values, lower.lim, upper.lim)
         },
         error = function(e) {
             # Handle errors for the entire column
@@ -188,14 +162,14 @@ zlog.loop <- function(xx, reflim_results) {
                 "-",
                 e$message
             ))
-            sorted_results[[col_name]] <- xx[[col_name]]
-            sorted_results[[paste0(col_name, "_zlog")]] <- NA
+            rep(NA_real_, nrow(xx))
         })
+        sorted_results[[zlog_names[col_index]]] <- zlog_column
     }
     
     end_time <- Sys.time()
     message("Total processing time: ", round(difftime(end_time, start_time, units = "secs"), 2), " seconds")
     
     # Combine the sorted columns into a dataframe
-    return(as.data.frame(sorted_results))
+    return(as.data.frame(sorted_results, check.names = FALSE))
 }

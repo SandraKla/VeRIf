@@ -20,10 +20,16 @@
 # write.csv2(dataset_original2, "reflim_data2.csv", row.names = FALSE)
 # write.csv2(dataset_original3, "reflim_data3.csv", row.names = FALSE)
 
-####################################### Load Script and Example-Dataset ###########################
+####################################### Load Scripts ##############################################
 
 # Allow CSV and Excel uploads up to 100 MB.
 options(shiny.maxRequestSize = 100 * 1024^2)
+
+# Minimum sample size recommended for reliable reference limit estimation.
+reflim_n_min <- 200
+
+# Candidate cluster counts for automatic selection and the BIC comparison.
+mclust_cluster_counts <- 1:15
 
 source("functions.R")
 source("excel_import.R")
@@ -81,56 +87,9 @@ if ("shinydashboard" %in% rownames(installed.packages())) {
     install.packages("shinydashboard")
     library(shinydashboard)}
 
-dataset_original <- reflimR::livertests
-
 ####################################### Texts #####################################################
 
-data_text <- HTML(paste0(
-  "Upload a CSV or Excel (.xlsx) file with column headers. CSV files must use semicolons (;) between values and commas (,) for decimals.", br(), br(),
-  "Include age in years, sex, and at least one laboratory parameter (use the analyte name as its column header). Columns may be in any order. After upload, check the age, sex and optional category column assignments and the female/male values. Select a category column to define groups, or None (all rows) to assign all rows to All.", br(), br(),
-  "Alternatively, enter or paste values into the editable table. Use the sidebar to select the laboratory parameter, category, sex and age range."
-))
-reflim_text <- HTML(paste0(
-  "These tab displays the corresponding plot and the outputs of the reflim() function, providing an estimation of new reference intervals or a verification of the selected target values. 
-  EL stands for equivalence limit. UM stands for uncertainty margin.
-  By clicking “Visualization of all plots across every process step”, all plots generated throughout the workflow can be displayed."
-))
-refineR_text<- HTML(paste0(
-  "If, during the verification with reflimR and its target values or own target values, a yellow or red bar appears, 
-  a follow-up analysis using refineR is recommended. The resulting reference intervals from refineR can be used as new target values
-  and re-verified with reflimR. If all indicators turn green, this suggests that the manufacturer’s target values are likely incorrect. 
-  If one or more indicators remain yellow or red, the data are considered too challenging for indirect methods. This assumption can be further 
-  evaluated in the “mclust” tab using a Gaussian mixture model (mclust)."
-))
-mclust_text <- HTML(paste0(
-  "Gaussian mixture modelling for the verification of reference intervals."
-))
-scatterplot_text <- HTML(paste0(
-  "The plots show the relationship between age, sex and the laboratory value."
-))
-zlog_text <- HTML(paste0(
-  "zlog values are calculated from the dataset and the calculated reference intervals. The lower reference limits (LL) and upper reference limits (UL) can transform any result x into a zlog value using the following equation:
-  zlog(x) = (log(x)–(log(LL)+ log(UL))/2)*3.92/(log(UL)–log(LL)). Values ranging from –1.96 to 1.96 are considered normal, while values below –5 and above 5 indicate pathological conditions."
-))
-rpart_text <- HTML(paste0(
-  "Decision trees are used here to divide the data into subgroups based on age and sex. The method identifies groups with similar values, allowing more appropriate calculation of reference intervals. The tree is built using the rpart package and visualized with rpart.plot."
-))
-about_text <- HTML(paste0(
-  "<p>VeRIf is an interactive Shiny web application for the verification and evaluation of reference intervals based on routine laboratory data using the R package reflimR. The web application supports medical laboratories in efficiently, transparently, and data-driven reviewing existing reference intervals.</p>",
-  br(), "<table class='table table-condensed' style='width: 100%; max-width: 900px;'>",
-  "<tr><td><strong>Version:</strong></td><td>1.0.4.1</td></tr>",
-  "<tr><td><strong>Depends:</strong></td><td>R (&gt;= 4.5.2)</td></tr>",
-  "<tr><td><strong>Imports:</strong></td><td>DT, mclust, refineR, reflimR, rhandsontable, readxl, rpart, rpart.plot, shiny, shinycssloaders, shinydashboard</td></tr>",
-  "<tr><td><strong>Author:</strong></td><td>Sandra Klawitter</td></tr>",
-  "<tr><td><strong>E-Mail:</strong></td><td>sandra.klawitter@trillium.de</td></tr>",
-  "<tr><td><strong>Workshop:</strong></td><td><a href='https://github.com/SandraKla/VeRIf-workshop'>https://github.com/SandraKla/VeRIf-workshop</a></td></tr>",
-  "<tr><td><strong>BugReports:</strong></td><td><a href='https://github.com/SandraKla/VeRIf/issues'>https://github.com/SandraKla/VeRIf/issues</a></td></tr>",
-  "<tr><td><strong>R-Code:</strong></td><td><a href='https://github.com/SandraKla/VeRIf'>https://github.com/SandraKla/VeRIf</a></td></tr>",
-  "</table>", br(),
-  "<p><strong>Disclaimer:</strong> Only anonymized data may be uploaded to this application. This application is provided &quot;as is&quot; and &quot;as available&quot;, without any express or implied warranties of any kind. No warranty is given regarding the accuracy, completeness, reliability, or timeliness of the results. ",
-  "The results are provided for informational and research purposes only and must not be used for diagnosis, treatment, prevention, or any form of clinical or medical decision-making. This application is not a medical device or medical product and does not replace professional medical advice. ",
-  "To the fullest extent permitted by law, the author disclaims all liability for any direct, indirect, incidental, consequential, or special damages arising from the use of this application or its results. Use of this application is entirely at your own risk.</p>"
-))
+source("texts.R", encoding = "UTF-8")
 
 ####################################### User Interface ############################################
 
@@ -142,14 +101,21 @@ ui <- dashboardPage(
       id = "sidebarid",
       
       uiOutput("parameters"),
-      textInput(
-        "parameter_label",
-        "Laboratory parameter name:",
-        value = ""
+      div(
+        class = "analyte-label-inputs",
+        textInput(
+          "parameter_label",
+          "Laboratory analyte:",
+          value = "",
+          width = "100%"
+        ),
+        textInput(
+          "parameter_units",
+          "Units:",
+          value = "",
+          width = "100%"
+        )
       ),
-      uiOutput("category"),
-      
-      uiOutput("sex_selection"),
       
       sliderInput(
         "age_end",
@@ -158,40 +124,39 @@ ui <- dashboardPage(
         max = 100,
         value = c(0, 100)),
       
+      uiOutput("sex_selection"),
+      uiOutput("category"),
+      
       hr(),
       
-      checkboxInput("check_targetvalues", "Load preinstalled target values", value = FALSE),
-      checkboxInput("check_target", "Load own target values", value = FALSE),
-      
       conditionalPanel(
-        condition = "input.check_target == true",
-        
+        condition = "output.preinstalled_targetvalues_available === true",
+        checkboxInput("check_targetvalues", "Load preinstalled target reference interval", value = FALSE)
+      ),
+      checkboxInput("check_target", "Target reference interval", value = FALSE),
+      
+      div(
+        class = "target-reference-interval",
         numericInput(
           "target_low",
-          "Lower value:",
+          "from",
           10,
           min = 0,
-          max = 10000
+          max = 10000,
+          width = "100%"
         ),
         
         numericInput(
           "target_upper",
-          "Upper value:",
+          "to",
           15,
           min = 0,
-          max = 10000
+          max = 10000,
+          width = "100%"
         )
       ), 
       uiOutput("refineR_checkbox_ui"),
       hr(),
-      
-      numericInput(
-        "nmin",
-        "Minimum number required for reliable reference limit estimation:",
-        200,
-        min = 40,
-        max = 1000
-      ),
       
       radioButtons(
         "lambda_type",
@@ -226,6 +191,51 @@ ui <- dashboardPage(
         .shiny-input-disabled {
           opacity: 0.55;
         }
+
+        .analyte-label-inputs {
+          display: flex;
+          gap: 10px;
+          padding: 12px 15px 0;
+          margin-bottom: 15px;
+        }
+
+        section.sidebar .analyte-label-inputs .shiny-input-container {
+          flex: 1 1 0;
+          min-width: 0;
+          padding: 0;
+          margin-bottom: 0;
+        }
+
+        .analyte-label-inputs .shiny-input-container:first-child {
+          flex-grow: 2;
+        }
+
+        .target-reference-interval {
+          display: flex;
+          gap: 10px;
+          padding: 0 15px;
+          margin-bottom: 15px;
+        }
+
+        .target-reference-interval .shiny-input-container {
+          display: flex;
+          align-items: center;
+          flex: 1 1 0;
+          gap: 6px;
+          min-width: 0;
+          padding: 0;
+          margin-bottom: 0;
+        }
+
+        .target-reference-interval label {
+          flex: 0 0 auto;
+          margin-bottom: 0;
+          font-weight: normal;
+        }
+
+        .target-reference-interval input {
+          min-width: 0;
+        }
       ")),
       tags$script(HTML("
         Shiny.addCustomMessageHandler('setInputDisabled', function(message) {
@@ -256,6 +266,11 @@ ui <- dashboardPage(
                    
                    p(data_text),
                    
+                   uiOutput("dataset_file"),
+                   uiOutput("upload_mapping_ui"),
+                   actionButton('reset', 'Reset Input', icon = icon("trash")),
+                   actionButton("load_demo", "Load demo data", icon = icon("database")), br(),br(),
+                   
                    fluidRow(
                      column(6, checkboxInput("show_table", tags$b("Editable table"), value = FALSE)),
                      column(6, actionButton("submit", "Submit"))
@@ -265,10 +280,7 @@ ui <- dashboardPage(
                       helpText("Enter or paste values into the existing columns (Sex: f = female, m = male). Click Submit after adding or changing data to use the table for analysis."),
                       withSpinner(rHandsontableOutput("editable_table"))
                     ), hr(),
-                    
-                    uiOutput("dataset_file"),
-                    uiOutput("upload_mapping_ui"),
-                    actionButton('reset', 'Reset Input', icon = icon("trash")), br(),br(),
+
                     DT::dataTableOutput("table")
                   )
         ),
@@ -277,10 +289,8 @@ ui <- dashboardPage(
                  icon = icon("chart-line"),
 
                  box(
-                   title = "",
                    status = "info",
                    width = 7,
-                   solidHeader = TRUE,
 
                    p(scatterplot_text),
                    plotOutput("scatterplot", height = "350px"),
@@ -322,7 +332,8 @@ ui <- dashboardPage(
                                 "Visualization with EL" = "pU",
                                 "Visualization with UM" = "VeRUS"
                               ),
-                              selected = "pU"
+                              selected = "pU",
+                              inline = TRUE
                             )
                           ),
                      
@@ -354,62 +365,60 @@ ui <- dashboardPage(
             fluidRow(
               
               column(
-                3,
-                checkboxInput(
-                  inputId = "auto_cluster",
-                  label = "Select optimal number of clusters automatically",
-                  value = TRUE
+                4,
+                selectizeInput(
+                  inputId = "n_cluster",
+                  label = "Number of clusters:",
+                  choices = c("Automatic (BIC)" = "auto",
+                              setNames(as.character(mclust_cluster_counts),
+                                       as.character(mclust_cluster_counts))),
+                  selected = "auto",
+                  options = list(create = FALSE)
                 )
               ),
               
               column(
-                3,
-                conditionalPanel(
-                  condition = "input.auto_cluster == false",
-                  numericInput(
-                    inputId = "n_cluster",
-                    label = "Number of clusters:",
-                    value = 3,
-                    min = 1,
-                    max = 15,
-                    step = 1
-                  )
-                )
-              ),
-              
-              column(
-                6,
+                8,
                 radioButtons(
                   inputId = "model_name",
                   label = "Univariate model for mclust:",
-                  choices = c("Equal variance (one-dimensional)" = "E", "Variable/unqual variance (one-dimensional)" = "V"),
-                  selected = "V"
+                  choices = c("Equal variance" = "E", "Unequal variance" = "V"),
+                  selected = "V",
+                  inline = TRUE
                 )
               )
             ),
 
             fluidRow(
               column(
-                6,
+                12,
                 radioButtons(
                   inputId = "mclust_distribution",
                   label = "Distribution for mclust:",
                   choices = c(
-                    "Use distribution from reflimR report" = "report",
+                    "From reflimR report" = "report",
                     "Normal" = "normal",
                     "Lognormal" = "lognormal"
                   ),
-                  selected = "report"
+                  selected = "report",
+                  inline = TRUE
                 )
               )
             ),
             
-            withSpinner(plotOutput("plotmclust", height = "70vh")),
+            fluidRow(
+              box(
+                title = "BIC model comparison",
+                status = "info",
+                width = 12,
+                collapsible = TRUE,
+                collapsed = TRUE,
+                p(mclust_bic_text),
+                withSpinner(plotOutput("plotmclustbic", height = "350px"))
+              )
+            ),
             
-            conditionalPanel(
-              condition = "input.auto_cluster == true",
-              withSpinner(plotOutput("plotmclustbic", height = "70vh"))
-            )
+            withSpinner(plotOutput("plotmclust", height = "70vh"))
           )
         ),
         
@@ -432,10 +441,8 @@ ui <- dashboardPage(
                   icon = icon("table"),
 
                   box(
-                    title = "",
                     status = "info",
                     width = 7,
-                    solidHeader = TRUE,
 
                     p(zlog_text),
                     withSpinner(DT::dataTableOutput("table_zlog", height = "700px"))
@@ -446,7 +453,6 @@ ui <- dashboardPage(
                   icon = icon("info-circle"),
                   
                   box(
-                    title = "",
                     status = "info",
                     width = 7,
                     
@@ -456,10 +462,8 @@ ui <- dashboardPage(
       ),
       
       box(
-        title = tagList(shiny::icon("table"), "Results:"),
-        status = "info",
+        status = "primary",
         width = 5,
-        solidHeader = TRUE,
         
         tabsetPanel(
           id = "results_tab",
@@ -502,30 +506,35 @@ server <- function(input, output, session) {
     )
   }
   
-  values <- reactiveValues(
-    upload_state = NULL
-  )
+  data_source <- reactiveVal("empty")
   
   observeEvent(input$dataset_file1, {
-    values$upload_state <- 'uploaded'
+    data_source("uploaded")
+    updateCheckboxInput(session, "show_table", value = FALSE)
   })
   
   observeEvent(input$reset, {
-    values$upload_state <- 'reset'
+    # Start a fresh session so removed dynamic inputs, table edits and cached
+    # results are cleared together with every visible input and its settings.
+    session$reload()
+  })
+
+  observeEvent(input$load_demo, {
+    data_source("demo")
+    updateCheckboxInput(session, "show_table", value = FALSE)
   })
   
   dataset_input <- reactive({
-    if (is.null(values$upload_state)) {
-      return(NULL)
-    } else if (values$upload_state == 'uploaded') {
-      return(input$dataset_file1)
-    } else if (values$upload_state == 'reset') {
-      return(NULL)
+    if (identical(data_source(), "uploaded")) {
+      input$dataset_file1
+    } else {
+      NULL
     }
   })
   
   output$dataset_file <- renderUI({
     input$reset ## Create a dependency with the reset button
+    input$load_demo
     fileInput('dataset_file1', label = 'Upload CSV or Excel (.xlsx)',
               multiple = FALSE, accept = c('.csv', '.xlsx'), buttonLabel = 'Choose file')
   })
@@ -860,7 +869,7 @@ server <- function(input, output, session) {
     
     validate(need(
       length(analyte_columns) > 0,
-      "Please choose age, sex and category columns so that at least one laboratory parameter remains."
+      "Please choose age, sex and category columns so that at least one laboratory analyte remains."
     ))
     
     sex_values <- dataset[[sex_column]]
@@ -904,7 +913,7 @@ server <- function(input, output, session) {
     
     standardized_dataset <- data.frame(
       Category = category_values,
-      Age = suppressWarnings(as.numeric(dataset[[age_column]])),
+      Age = parse_numeric_values(dataset[[age_column]]),
       Sex = normalized_sex,
       stringsAsFactors = FALSE
     )
@@ -912,11 +921,24 @@ server <- function(input, output, session) {
     cbind(standardized_dataset, dataset[analyte_columns])
   })
 
+  active_dataset <- reactive({
+    if (isTRUE(input$show_table) && isTRUE(input$submit > 0)) {
+      data_store()
+    } else if (identical(data_source(), "uploaded")) {
+      uploaded_dataset_standardized()
+    } else if (identical(data_source(), "demo")) {
+      reflimR::livertests
+    } else {
+      NULL
+    }
+  })
+
   parameter_label_value <- reactiveVal(NULL)
 
   observeEvent(input$parameter, {
-    parameter_label_value(input$parameter)
-    updateTextInput(session, "parameter_label", value = input$parameter)
+    label <- if (is.null(input$parameter)) "" else input$parameter
+    parameter_label_value(label)
+    updateTextInput(session, "parameter_label", value = label)
   }, ignoreNULL = FALSE)
 
   observeEvent(input$parameter_label, {
@@ -924,17 +946,10 @@ server <- function(input, output, session) {
   }, ignoreInit = TRUE)
   
   output$parameters <- renderUI({
-    if(input$show_table && input$submit) {
-      choices <- colnames(data_store())[4:length(colnames(data_store()))]
-    } else{
-    if (is.null(dataset_input())) { 
-      choices <- colnames(dataset_original)[4:length(colnames(dataset_original))]
-    } 
-    else{
-      dataset <- uploaded_dataset_standardized()
-      choices <- setdiff(colnames(dataset), c("Category", "Age", "Sex"))
-      }}
-    validate(need(length(choices) > 0, "No laboratory parameter columns are available."))
+    dataset <- active_dataset()
+    if (is.null(dataset)) return(NULL)
+    choices <- setdiff(colnames(dataset), c("Category", "Age", "Sex"))
+    validate(need(length(choices) > 0, "No laboratory analyte columns are available."))
     
     selected_parameter <- if (!is.null(input$parameter) && input$parameter %in% choices) {
       input$parameter
@@ -942,21 +957,13 @@ server <- function(input, output, session) {
       choices[1]
     }
     
-    selectInput("parameter","Select laboratory value:", choices = choices, selected = selected_parameter)
+    selectInput("parameter","Select laboratory analyte:", choices = choices, selected = selected_parameter)
   })   
   
   output$category <- renderUI({
-    if(input$show_table && input$submit) {
-      choices <- unique(data_store()[[1]])
-    } else{
-      if (is.null(dataset_input())) { 
-        choices <- unique(dataset_original[[1]])
-      } else{
-        dataset <- uploaded_dataset_standardized()
-        choices <- unique(dataset$Category)
-      }
-    }
-    choices <- c("Not selected", choices)
+    dataset <- active_dataset()
+    if (is.null(dataset)) return(NULL)
+    choices <- c("Not selected", unique(dataset$Category))
     
     selected_category <- if (!is.null(input$category) && input$category %in% choices) {
       input$category
@@ -968,23 +975,18 @@ server <- function(input, output, session) {
   })
 
   output$sex_selection <- renderUI({
-    if (isTRUE(input$show_table) && isTRUE(input$submit > 0)) {
-      dataset <- data_store()
-    } else if (is.null(dataset_input())) {
-      dataset <- dataset_original
-    } else {
-      dataset <- uploaded_dataset_standardized()
-    }
+    dataset <- active_dataset()
+    if (is.null(dataset)) return(NULL)
 
     available_sexes <- intersect(c("f", "m"), unique(as.character(dataset$Sex)))
     choices <- if (identical(available_sexes, c("f", "m"))) {
-      c("Female (F) & Male (M)" = "t", "Female (F)" = "f", "Male (M)" = "m")
+      c("Female & Male" = "t", "Female" = "f", "Male" = "m")
     } else if (identical(available_sexes, "f")) {
-      c("Female (F)" = "f")
+      c("Female" = "f")
     } else if (identical(available_sexes, "m")) {
-      c("Male (M)" = "m")
+      c("Male" = "m")
     } else {
-      c("Female (F) & Male (M)" = "t", "Female (F)" = "f", "Male (M)" = "m")
+      c("Female & Male" = "t", "Female" = "f", "Male" = "m")
     }
 
     selected_sex <- if (!is.null(input$sex) && input$sex %in% unname(choices)) {
@@ -993,11 +995,21 @@ server <- function(input, output, session) {
       unname(choices)[1]
     }
 
-    selectInput("sex", "Select the sex:", choices = choices, selected = selected_sex)
+    selectInput("sex", "Select sex:", choices = choices, selected = selected_sex)
   })
   
   preinstalled_targetvalues_available <- reactive({
-    is.null(dataset_input()) && !(isTRUE(input$show_table) && isTRUE(input$submit > 0))
+    identical(data_source(), "demo") &&
+      !(isTRUE(input$show_table) && isTRUE(input$submit > 0))
+  })
+
+  output$preinstalled_targetvalues_available <- function(...) {
+    preinstalled_targetvalues_available()
+  }
+  outputOptions(output, "preinstalled_targetvalues_available", suspendWhenHidden = FALSE)
+
+  use_preinstalled_targets <- reactive({
+    preinstalled_targetvalues_available() && isTRUE(input$check_targetvalues)
   })
   
   # Create a reactive values to track the state of the checkboxes
@@ -1041,6 +1053,8 @@ server <- function(input, output, session) {
       reactive_values$check_refineR <- TRUE
       reactive_values$check_targetvalues <- FALSE
       reactive_values$check_target <- FALSE
+      updateTabsetPanel(session, "analysis_tab", selected = "reflimR")
+      updateTabsetPanel(session, "results_tab", selected = "reflimR Results")
     } else {
       reactive_values$check_refineR <- FALSE
     }
@@ -1099,35 +1113,57 @@ server <- function(input, output, session) {
   
   ##################################### Reactive Expressions ######################################
 
-  parameter_display <- reactive({
+  parameter_name <- reactive({
     label_value <- parameter_label_value()
-    
-    if (is.null(label_value)) {
-      return(input$parameter)
-    }
-    
-    custom_label <- trimws(label_value)
+    custom_label <- if (is.null(label_value)) "" else trimws(label_value)
     if (nzchar(custom_label)) {
       custom_label
     } else {
       input$parameter
     }
   })
+
+  parameter_display <- reactive({
+    analyte <- parameter_name()
+    units <- if (is.null(input$parameter_units)) "" else trimws(input$parameter_units)
+    if (nzchar(units)) {
+      paste0(analyte, " (", units, ")")
+    } else {
+      analyte
+    }
+  })
+
+  table_export_buttons <- function(result_type, export_columns = NULL) {
+    analyte <- gsub("[^[:alnum:]_-]+", "_", parameter_name())
+    analyte <- gsub("^_+|_+$", "", analyte)
+    if (length(analyte) == 0L || !nzchar(analyte)) analyte <- "Analyte"
+    prefix <- paste("VeRIf", analyte, result_type, sep = "_")
+
+    # Use the browser's current local date when the export button is clicked.
+    filename <- DT::JS(sprintf("function() {
+      var now = new Date();
+      var date = now.getFullYear() + '-' +
+        ('0' + (now.getMonth() + 1)).slice(-2) + '-' +
+        ('0' + now.getDate()).slice(-2);
+      return %s + '_' + date;
+    }", jsonlite::toJSON(prefix, auto_unbox = TRUE)))
+
+    lapply(c("copy", "csv", "pdf", "print"), function(button) {
+      config <- list(extend = button, filename = filename, title = filename)
+      if (!is.null(export_columns)) {
+        config$exportOptions <- list(columns = export_columns)
+      }
+      config
+    })
+  }
   
   refineR_data <- reactive({
-    if (isTRUE(input$show_table) && input$submit > 0) {
-      dataset <- data_store()
-    } else {
-      if (is.null(dataset_input())) {
-        dataset <- dataset_original
-      } else {
-        dataset <- uploaded_dataset_standardized()
-      }
-    }
+    dataset <- req(active_dataset())
+    req(input$parameter, input$age_end, input$sex)
     
     validate(need(
       input$parameter %in% names(dataset),
-      "Please select a valid laboratory parameter."
+      "Please select a valid laboratory analyte."
     ))
     
     dataset <- dataset[, c("Category", "Age", "Sex", input$parameter), drop = FALSE]
@@ -1136,8 +1172,8 @@ server <- function(input, output, session) {
       dataset <- subset(dataset, Category == input$category)
     }
     
-    dataset$Age <- suppressWarnings(as.numeric(dataset$Age))
-    dataset[, 4] <- as.numeric(dataset[, 4])
+    dataset$Age <- parse_numeric_values(dataset$Age)
+    dataset[, 4] <- parse_numeric_values(dataset[, 4])
     
     dataset <- subset(dataset, Age >= input$age_end[1] & Age <= input$age_end[2])
     
@@ -1150,20 +1186,12 @@ server <- function(input, output, session) {
   
   # Create the table with the dataset as reactive expression 
   reflim_data <- reactive({
-    
-    if(input$show_table && input$submit) {
-       dataset <- data_store()
-    } else{
-    
-      if (is.null(dataset_input())) {
-        dataset <- dataset_original
-      } else {
-        dataset <- uploaded_dataset_standardized()
-      }}
+    dataset <- req(active_dataset())
+    req(input$parameter, input$age_end, input$sex)
     
     validate(need(
       input$parameter %in% names(dataset),
-      "Please select a valid laboratory parameter."
+      "Please select a valid laboratory analyte."
     ))
     
     dataset <- dataset[, c("Category", "Age", "Sex", input$parameter), drop = FALSE]
@@ -1176,8 +1204,8 @@ server <- function(input, output, session) {
       ncol(dataset) == 4, 
       "Check if you have used the correct template! You need 4 columns (Category, Age, Sex, Value)!"
     ))
-    dataset$Age <- suppressWarnings(as.numeric(dataset$Age))
-    dataset[, 4] <- as.numeric(dataset[, 4])
+    dataset$Age <- parse_numeric_values(dataset$Age)
+    dataset[, 4] <- parse_numeric_values(dataset[, 4])
     
     dataset <- subset(dataset, Age >= input$age_end[1] & Age <= input$age_end[2])
     
@@ -1189,18 +1217,10 @@ server <- function(input, output, session) {
   })
 
   get_alldata_file <- reactive({
+    dataset <- req(active_dataset())
+    req(input$age_end, input$sex)
     
-    if(input$show_table && input$submit) {
-      dataset <- data_store()
-    } else{
-      
-      if (is.null(dataset_input())) {
-        dataset <- dataset_original
-      } else {
-        dataset <- uploaded_dataset_standardized()
-      }}
-    
-    dataset$Age <- suppressWarnings(as.numeric(dataset$Age))
+    dataset$Age <- parse_numeric_values(dataset$Age)
     
     if (!is.null(input$category) && input$category != "Not selected") {
       dataset <- subset(dataset, Category == input$category)
@@ -1222,7 +1242,7 @@ server <- function(input, output, session) {
     validate(need(nrow(dat) > 39,
                   paste0("(reflim) n = ", nrow(dat), ". The absolute minimum for reference limit estimation is 40.")))
 
-    reflim(dat[, 4], n.min = input$nmin, plot.all = FALSE, plot.it = FALSE)
+    reflim_with_warnings(dat[, 4], n.min = reflim_n_min, plot.all = FALSE, plot.it = FALSE)
   })
 
   get_data_report <- reactive({
@@ -1231,7 +1251,7 @@ server <- function(input, output, session) {
     validate(need(nrow(dat) > 39,
                   paste0("(reflim) n = ", nrow(dat), ". The absolute minimum for reference limit estimation is 40.")))
     
-    if (input$check_target == FALSE && input$check_targetvalues == FALSE && input$check_refineR == FALSE) {
+    if (!isTRUE(input$check_target) && !use_preinstalled_targets() && !isTRUE(input$check_refineR)) {
       reflim_text <- get_reflim_report()
     }
     
@@ -1248,10 +1268,10 @@ server <- function(input, output, session) {
       validate(need(input$target_low > 0 && input$target_upper > 0, 
                     "(reflim) the lower and upper target limit must be greater than 0."))
       
-      reflim_text <- reflim(dat[,4], targets = c(input$target_low, input$target_upper), n.min = input$nmin, plot.all = FALSE, plot.it = FALSE)
+      reflim_text <- reflim_with_warnings(dat[,4], targets = c(input$target_low, input$target_upper), n.min = reflim_n_min, plot.all = FALSE, plot.it = FALSE)
     }
     
-    if (input$check_targetvalues) {
+    if (use_preinstalled_targets()) {
       
       validate(
         need(
@@ -1277,9 +1297,9 @@ server <- function(input, output, session) {
       }
       
       validate(need(nrow(targets_values) > 0, 
-                    "(reflim) There are no preloaded target values for this parameter!"))
+                    "(reflim) There are no preloaded target reference interval for this parameter!"))
       
-      reflim_text <- reflim(dat[,4], targets = c(targetvalues_low, targetvalues_upper), n.min = input$nmin, plot.all = FALSE, plot.it = FALSE)
+      reflim_text <- reflim_with_warnings(dat[,4], targets = c(targetvalues_low, targetvalues_upper), n.min = reflim_n_min, plot.all = FALSE, plot.it = FALSE)
     }
     
     if(input$check_refineR) {
@@ -1290,7 +1310,7 @@ server <- function(input, output, session) {
       targetvalues_low <- table_refineR$PointEst[1]
       targetvalues_upper <- table_refineR$PointEst[2]
       
-      reflim_text <- reflim(dat[,4], targets = c(targetvalues_low, targetvalues_upper), n.min = input$nmin, plot.all = FALSE, plot.it = FALSE)
+      reflim_text <- reflim_with_warnings(dat[,4], targets = c(targetvalues_low, targetvalues_upper), n.min = reflim_n_min, plot.all = FALSE, plot.it = FALSE)
     }
     
     report <- reflim_text
@@ -1299,6 +1319,7 @@ server <- function(input, output, session) {
   })
   
   fit_refineR <- eventReactive(list(
+    data_source(),
     input$parameter,
     input$category,
     input$sex,
@@ -1451,7 +1472,7 @@ server <- function(input, output, session) {
       }
     } else if(input$lambda_type == "refineR"){
       validate(need(refineR_done(), "(refineR) Please perform the refineR calculation first."))
-      lambda <- lambda_refineR
+      lambda <- fit_refineR()$Lambda
     } else if(input$lambda_type == "user"){
       lambda <- input$lambda
     }
@@ -1476,14 +1497,14 @@ server <- function(input, output, session) {
                     "(reflim) the lower and upper target limit must be greater than 0."))
       
       if(plot_choice == "VeRUS"){
-        reflim_result <- reflim_VeRUS(dat[, 4], targets = c(input$target_low, input$target_upper), n.min = input$nmin, plot.all = reflimR.plot.all, lambda = lambda,
-                                      main = paste0("Reference limits for ", parameter_name))}
+        reflim_result <- reflim_VeRUS(dat[, 4], targets = c(input$target_low, input$target_upper), n.min = reflim_n_min, plot.all = reflimR.plot.all, lambda = lambda,
+                                      main = paste0("Reference limits for ", parameter_name), xlab = parameter_name)}
       if(plot_choice == "pU"){
-        reflim_result <- reflim(dat[, 4], targets = c(input$target_low, input$target_upper), n.min = input$nmin, plot.all = reflimR.plot.all,
-                                main = paste0("Reference limits for ", parameter_name))}
+        reflim_result <- reflim(dat[, 4], targets = c(input$target_low, input$target_upper), n.min = reflim_n_min, plot.all = reflimR.plot.all,
+                                main = paste0("Reference limits for ", parameter_name), xlab = parameter_name)}
     }
     
-    if (input$check_targetvalues) {
+    if (use_preinstalled_targets()) {
       validate(
         need(
           input$sex != "t" || input$parameter %in% c("ALB", "BIL", "PROT"),
@@ -1508,14 +1529,14 @@ server <- function(input, output, session) {
       }
       
       validate(need(nrow(targets_values) > 0, 
-                    "(reflim) There are no preloaded target values for this parameter!"))
+                    "(reflim) There are no preloaded target reference interval for this parameter!"))
       
       if(plot_choice == "VeRUS"){
-        reflim_result <- reflim_VeRUS(dat[, 4], targets = c(targetvalues_low, targetvalues_upper), n.min = input$nmin, plot.all = reflimR.plot.all, lambda = lambda,
-                                      main = paste0("Reference limits for ", parameter_name))}
+        reflim_result <- reflim_VeRUS(dat[, 4], targets = c(targetvalues_low, targetvalues_upper), n.min = reflim_n_min, plot.all = reflimR.plot.all, lambda = lambda,
+                                      main = paste0("Reference limits for ", parameter_name), xlab = parameter_name)}
       if(plot_choice == "pU"){
-        reflim_result <- reflim(dat[, 4], targets = c(targetvalues_low, targetvalues_upper), n.min = input$nmin, plot.all = reflimR.plot.all,
-                                main = paste0("Reference limits for ", parameter_name))}
+        reflim_result <- reflim(dat[, 4], targets = c(targetvalues_low, targetvalues_upper), n.min = reflim_n_min, plot.all = reflimR.plot.all,
+                                main = paste0("Reference limits for ", parameter_name), xlab = parameter_name)}
     }
     
     if(input$check_refineR) {
@@ -1527,20 +1548,21 @@ server <- function(input, output, session) {
       targetvalues_upper <- table_refineR$PointEst[2]
       
       if(plot_choice == "VeRUS"){
-        reflim_result <- reflim_VeRUS(dat[, 4], targets = c(targetvalues_low, targetvalues_upper), n.min = input$nmin, plot.all = reflimR.plot.all, lambda = lambda,
-                                      main = paste0("Reference limits for ", parameter_name))}
+        reflim_result <- reflim_VeRUS(dat[, 4], targets = c(targetvalues_low, targetvalues_upper), n.min = reflim_n_min, plot.all = reflimR.plot.all, lambda = lambda,
+                                      main = paste0("Reference limits for ", parameter_name), xlab = parameter_name)}
       if(plot_choice == "pU"){
-        reflim_result <- reflim(dat[,4], targets = c(targetvalues_low, targetvalues_upper), n.min = input$nmin, plot.all = reflimR.plot.all,
-                                main = paste0("Reference limits for ", parameter_name))}
+        reflim_result <- reflim(dat[,4], targets = c(targetvalues_low, targetvalues_upper), n.min = reflim_n_min, plot.all = reflimR.plot.all,
+                                main = paste0("Reference limits for ", parameter_name), xlab = parameter_name)}
     }
     
-    if (input$check_target == FALSE && input$check_targetvalues == FALSE && input$check_refineR == FALSE) {
+    if (!isTRUE(input$check_target) && !use_preinstalled_targets() && !isTRUE(input$check_refineR)) {
       
       if(plot_choice == "VeRUS"){
-        reflim_result <- reflim_VeRUS(dat[, 4], n.min = input$nmin, plot.all = reflimR.plot.all, lambda = lambda,
-                                      main = paste0("Reference limits for ", parameter_name))}
+        reflim_result <- reflim_VeRUS(dat[, 4], n.min = reflim_n_min, plot.all = reflimR.plot.all, lambda = lambda,
+                                      main = paste0("Reference limits for ", parameter_name), xlab = parameter_name)}
       if(plot_choice == "pU"){
-        reflim_result <- reflim(dat[, 4], n.min = input$nmin, plot.all = reflimR.plot.all, main = paste0("Reference limits for ", parameter_name))}
+        reflim_result <- reflim(dat[, 4], n.min = reflim_n_min, plot.all = reflimR.plot.all,
+                                main = paste0("Reference limits for ", parameter_name), xlab = parameter_name)}
     }
     
     reflim_result
@@ -1561,16 +1583,21 @@ server <- function(input, output, session) {
     
     report <- get_data_report()
     dat <- reflim_data()
+    parameter_name <- parameter_display()
+    warning_text <- if (length(report$warnings) > 0L) {
+      paste(report$warnings, collapse = " ")
+    } else {
+      "None"
+    }
     validate(need(
       length(report$limits) >= 1L,
       "(reflim) No reference limits are available. Please check the selected data and settings."
     ))
     if (!is.na(report$limits[1])) {
-      parameter_name <- parameter_display()
       converted_sex <- switch(input$sex,
-                              "f" = "Female(F)",
-                              "m" = "Male(M)",
-                              "t" = "Female(F) & Male(M)")
+                              "f" = "Female",
+                              "m" = "Male",
+                              "t" = "Female & Male")
       
       
       if(input$lambda_type == "reflimR"){
@@ -1585,7 +1612,7 @@ server <- function(input, output, session) {
         }
       } else if(input$lambda_type == "refineR"){
         validate(need(refineR_done(), "(refineR) Please perform the refineR calculation first."))
-        lambda <- lambda_refineR
+        lambda <- fit_refineR()$Lambda
       } else if(input$lambda_type == "user"){
         lambda <- input$lambda
       }
@@ -1605,9 +1632,22 @@ server <- function(input, output, session) {
         report_upper_target_VeRUS <- c(round(report_target_versus$upper.lim.low, 1), round(report_target_versus$upper.lim.upp, 1))
       }
       
+      report_interpretation_um <- rep(NA_character_, 2)
+      valid_um_comparison <-
+        all(is.finite(c(report$limits[1:2], report$targets[1:2]))) &&
+        report$limits[1] > 0 && report$limits[2] > report$limits[1] &&
+        report$targets[1] > 0 && report$targets[2] > report$targets[1]
+      if (valid_um_comparison &&
+          all(is.finite(c(unlist(report_versus), unlist(report_target_versus))))) {
+        report_interpretation_um <- interpretation_VeRUS(
+          report$limits[1:2], report$targets[1:2], lambda = lambda
+        )$dev.lim
+      }
+
       table_report <- t(data.frame(
         "Sex and Age:" = paste0(converted_sex, " (", input$age_end[1], "-", input$age_end[2], ")"),
         "n:" = nrow(dat),
+        "Warnings:" = warning_text,
         "Category:" = input$category,
         "Mean (sd):" = paste0(round(report$stats[1], 2), " (", round(report$stats[2], 2), ")"),
         "Lognormal Distribution:" = report$lognormal,
@@ -1623,20 +1663,28 @@ server <- function(input, output, session) {
         "Upper target tolerance intervals (EL):" = paste0(report$targets[5], " - " , report$targets[6]),
         "Lower UM target intervals:" = paste0(report_lower_target_VeRUS[1], " - " , report_lower_target_VeRUS[2]),
         "Upper UM target intervals:" = paste0(report_upper_target_VeRUS[1], " - " , report_upper_target_VeRUS[2]),
-        "Interpretation of the lower limit:" = report$interpretation[1],
-        "Interpretation of the upper limit:" = report$interpretation[2],
+        "Interpretation of the lower limit (EL):" = report$interpretation[1],
+        "Interpretation of the upper limit (EL):" = report$interpretation[2],
+        "Interpretation of the lower limit (UM):" = report_interpretation_um[1],
+        "Interpretation of the upper limit (UM):" = report_interpretation_um[2],
         "Lambda for UM:" = lambda,
         check.names = FALSE))
-      colnames(table_report) <- parameter_name
-      
-      DT::datatable(table_report, extensions = 'Buttons',
-                    options = list(dom = 'Bt', pageLength = 20, buttons = c('copy', 'csv', 'pdf', 'print')))
+    } else {
+      table_report <- t(data.frame(
+        "n:" = nrow(dat),
+        "Warnings:" = warning_text,
+        check.names = FALSE))
     }
+    colnames(table_report) <- parameter_name
+
+    DT::datatable(table_report, extensions = 'Buttons',
+                  options = list(dom = 'tB', pageLength = nrow(table_report), buttons = table_export_buttons("reflimR")))
   })
    
   refineR_done <- reactiveVal(FALSE)
   
   observeEvent(list(
+    data_source(),
     input$parameter,
     input$category,
     input$sex,
@@ -1656,13 +1704,13 @@ server <- function(input, output, session) {
   }, ignoreInit = TRUE)
   
   output$plotrefineR <- renderPlot({ #Tab:refineR
-    plot(fit_refineR())
+    plot(fit_refineR(), xlab = parameter_display())
   })
   
   output$refineR_checkbox_ui <- renderUI({ 
     checkboxInput(
       "check_refineR",
-      "Load calculated refineR values",
+      "Compare reflimR and refineR",
       value = FALSE
     )
   })
@@ -1673,12 +1721,10 @@ server <- function(input, output, session) {
     table_refineR <- getRI(table_refineR_original)
     parameter_name <- parameter_display()
     
-    lambda_refineR <<- table_refineR_original$Lambda
-    
     converted_sex <- switch(input$sex,
-                            "f" = "Female(F)",
-                            "m" = "Male(M)",
-                            "t" = "Female(F) & Male(M)")
+                            "f" = "Female",
+                            "m" = "Male",
+                            "t" = "Female & Male")
     
     table_report <- t(data.frame(
       "Sex and Age:" = paste0(converted_sex, " (", input$age_end[1], "-", input$age_end[2], ")"),
@@ -1689,7 +1735,7 @@ server <- function(input, output, session) {
     colnames(table_report) <- parameter_name
     
     DT::datatable(table_report, extensions = 'Buttons',
-                  options = list(dom = 'Bt', pageLength = 15, buttons = c('copy', 'csv', 'pdf', 'print')))
+                  options = list(dom = 'tB', pageLength = 15, buttons = table_export_buttons("refineR")))
   })
   
   mclust_plot_digits <- function(x) {
@@ -1752,41 +1798,65 @@ server <- function(input, output, session) {
     )
   })
   
-  output$plotmclust <- renderPlot({ #Tab:mclust
-    
+  mclust_n_clusters <- reactive({
+    req(input$n_cluster)
+    if (identical(input$n_cluster, "auto")) {
+      return(mclust_cluster_counts)
+    }
+
     validate(
       need(
-        input$auto_cluster || 
-          (!is.null(input$n_cluster) && input$n_cluster >= 1 && input$n_cluster <= 15),
-        "Please choose a number of clusters between 1 and 15."
+        input$n_cluster %in% as.character(mclust_cluster_counts),
+        "Please choose Automatic (BIC) or a whole number of clusters between 1 and 15."
       )
     )
-    
+
+    as.integer(input$n_cluster)
+  })
+
+  update_mclust_cluster_label <- function(count = NULL) {
+    automatic_label <- if (is.null(count)) {
+      "Automatic (BIC)"
+    } else {
+      paste0("Automatic (BIC): ", count)
+    }
+    updateSelectizeInput(
+      session, "n_cluster",
+      choices = c(setNames("auto", automatic_label),
+                  setNames(as.character(mclust_cluster_counts),
+                           as.character(mclust_cluster_counts))),
+      selected = isolate(input$n_cluster)
+    )
+  }
+
+  output$plotmclust <- renderPlot({ #Tab:mclust
+
+    # Clear the previous count before validating and fitting the current data.
+    update_mclust_cluster_label()
     withProgress(message = "mclust Calculation …", {
       dat <- reflim_data()
       values <- mclust_plot_values(dat[, 4])
-      n_cluster <- if (input$auto_cluster) NULL else input$n_cluster
+      n_cluster <- mclust_n_clusters()
       plot_digits <- mclust_plot_digits(values)
-      lab_mclust(values, lognormal = mclust_lognormal(), model = input$model_name, n.cluster = n_cluster, remove.extremes = T, digits = plot_digits)
+      fit <- lab_mclust(values, lognormal = mclust_lognormal(), model = input$model_name, n.cluster = n_cluster, remove.extremes = T, digits = plot_digits,
+                        xlab = parameter_display())
+      if (identical(input$n_cluster, "auto")) {
+        update_mclust_cluster_label(nrow(fit$stats))
+      }
+      invisible(fit)
     })
   })
   
   output$plotmclustbic <- renderPlot({ #Tab:mclust
-    
-    validate(
-      need(
-        input$auto_cluster || 
-          (!is.null(input$n_cluster) && input$n_cluster >= 1 && input$n_cluster <= 15),
-        "Please choose a number of clusters between 1 and 15."
-      )
-    )
-    
+
     withProgress(message = "mclust Calculation …", {
       dat <- reflim_data()
       values <- mclust_plot_values(dat[, 4])
-      n_cluster <- if (input$auto_cluster) NULL else input$n_cluster
       plot_digits <- mclust_plot_digits(values)
-      lab_mclust(values, lognormal = mclust_lognormal(), model = input$model_name, n.cluster = n_cluster, remove.extremes = T, plot.bic = T, digits = plot_digits)
+      fit <- lab_mclust(values, lognormal = mclust_lognormal(), model = input$model_name,
+                        n.cluster = mclust_cluster_counts, remove.extremes = TRUE,
+                        plot.it = FALSE, digits = plot_digits)
+      plot(fit$BIC)
     })
   })
   
@@ -1810,10 +1880,10 @@ server <- function(input, output, session) {
     pchs <- ifelse(dat[, 3] == "f", 17, 19)
     plot(dat[,4] ~ dat[,2], pch = pchs, cex = 1, col = colors, xlab = "Age", ylab = parameter_name)
 
-    unique_levels <- levels(factor(dat[, 3]))
+    unique_levels <- c("f", "m")[c("f", "m") %in% dat[, 3]]
     legend(
       "topright",
-      legend = unique_levels,
+      legend = c(f = "Female", m = "Male")[unique_levels],
       pch = ifelse(unique_levels == "f", 17, 19),
       col = ifelse(unique_levels == "f", "indianred", "cornflowerblue")
     )
@@ -1842,13 +1912,13 @@ server <- function(input, output, session) {
       }
       count_max <- max(c(hist_m, hist_w), 1)
 
-      bar_positions <- barplot(rbind(hist_m,hist_w), col = c("cornflowerblue","indianred"),
+      bar_positions <- barplot(rbind(hist_w,hist_m), col = c("indianred","cornflowerblue"),
               names.arg = age_labels, xlab = "Age", las = 1, beside = TRUE, ylab = "Number of data",
               ylim = c(0, count_max * 1.5))
       abline(h = 0)
       legend("topright", inset = c(0, -0.08), xpd = NA,
-             legend = c(paste0("m: ", nrow(hist_data_m)), paste0("f: ", nrow(hist_data_w))),
-             col = c("cornflowerblue","indianred"), pch = c(19, 19))
+             legend = c(paste0("Female: ", nrow(hist_data_w)), paste0("Male: ", nrow(hist_data_m))),
+             col = c("indianred","cornflowerblue"), pch = c(19, 19))
 
       # Align ages with the grouped bars and draw in the existing coordinates.
       age_centers <- colMeans(bar_positions)
@@ -1885,16 +1955,16 @@ server <- function(input, output, session) {
                       floor(max(dat$Age) / group_width) * group_width, by = group_width)
     age_labels <- paste0(age_starts, "-<", age_starts + group_width)
     age_group <- factor(floor(dat$Age / group_width) * group_width, levels = age_starts)
-    sex_levels <- c("m", "f")[c("m", "f") %in% dat$Sex]
+    sex_levels <- c("f", "m")[c("f", "m") %in% dat$Sex]
     sex_group <- factor(dat$Sex, levels = sex_levels)
-    sex_colors <- c(m = "cornflowerblue", f = "indianred")[sex_levels]
+    sex_colors <- c(f = "indianred", m = "cornflowerblue")[sex_levels]
     grouped_values <- split(values, interaction(sex_group, age_group, drop = FALSE))
 
     use_log <- identical(input$overview_boxplot_scale, "log")
     validate(need(!use_log || all(values > 0),
                   "Logarithmic scale requires positive values. Choose Linear for data containing zero or negative values."))
 
-    # Keep male/female boxes beside each other, with one label per age interval.
+    # Keep female/male boxes beside each other, with one label per age interval.
     offsets <- if (length(sex_levels) == 2) c(-0.18, 0.18) else 0
     box_positions <- rep(seq_along(age_starts), each = length(sex_levels)) +
       rep(offsets, times = length(age_starts))
@@ -1910,7 +1980,8 @@ server <- function(input, output, session) {
     axis(1, at = seq_along(age_starts), labels = age_labels, cex.axis = 0.8)
     mtext(paste0(group_width, "-year age groups"), side = 3, adj = 0, line = 0.5, cex = 0.85)
     legend("topright", inset = c(0, -0.12), xpd = NA,
-           legend = sex_levels, fill = sex_colors, horiz = TRUE, bty = "n")
+           legend = c(f = "Female", m = "Male")[sex_levels],
+           fill = sex_colors, horiz = TRUE, bty = "n")
   })
   
   zlog_table_data <- reactive({
@@ -1938,9 +2009,7 @@ server <- function(input, output, session) {
       zlog_table_data(), rownames = FALSE, extensions = 'Buttons', class = 'cell-border',
       options = list(
         dom = 'Blfrtip', pageLength = 15, deferRender = TRUE,
-        buttons = lapply(c('copy', 'csv', 'pdf', 'print'), function(button) {
-          list(extend = button, exportOptions = list(columns = 0:5))
-        }),
+        buttons = table_export_buttons("zlog", export_columns = 0:5),
         # Hidden color columns travel with each server-side page. This avoids
         # embedding a full-dataset styleEqual lookup in the browser callback.
         columnDefs = list(list(targets = 6:7, visible = FALSE, searchable = FALSE))
@@ -1960,44 +2029,64 @@ server <- function(input, output, session) {
       
       dat <- get_alldata_file()
       dataset <- dat[c(-1,-2,-3)]
-      reflim.loop.results <- reflim.loop(dataset, plot.it = FALSE)
+      reflim.loop.results <- reflim.loop(dataset, n.min = reflim_n_min, plot.it = FALSE)
       
-      tmpdir <- tempdir()
+      tmpdir <- tempfile("VeRIf_ReferenceIntervals_")
+      dir.create(tmpdir)
+      on.exit(unlink(tmpdir, recursive = TRUE), add = TRUE)
       csv_files <- c()
+      csv_names <- setNames(reference_interval_filenames(names(reflim.loop.results)),
+                            names(reflim.loop.results))
       
       for (col in names(reflim.loop.results)) {
         report <- reflim.loop.results[[col]]
         
         converted_sex <- switch(input$sex,
-                                "f" = "Female(F)",
-                                "m" = "Male(M)",
-                                "t" = "Female(F) & Male(M)")
+                                "f" = "Female",
+                                "m" = "Male",
+                                "t" = "Female & Male")
         
-        df <- t(data.frame(
-          "Sex and Age:" = paste0(converted_sex, " (", input$age_end[1], "-", input$age_end[2], ")"),
-          "Category:" = input$category,
-          "Mean:" = report$stats[1],
-          "Standard deviation:" = report$stats[2],
-          "Lognormal Distribution:" = report$lognormal,
-          "Reference Interval:" = paste0(report$limits[1] , " - " , report$limits[2]),
-          "Lower tolerance intervals:" = paste0(report$limits[3], " - " , report$limits[4]),
-          "Upper tolerance intervals:" = paste0(report$limits[5], " - " , report$limits[6]),
-          "Target Limits:" = paste0(report$targets[1], " - " , report$targets[2]),
-          "Lower target tolerance intervals:" = paste0(report$targets[3], " - " , report$targets[4]),
-          "Upper target tolerance intervals:" = paste0(report$targets[5], " - " , report$targets[6]),
-          "Lower confidence intervals:" = paste0(report$confidence.int[1], " - " , report$confidence.int[2]),
-          "Upper confidence intervals:" = paste0(report$confidence.int[3], " - " , report$confidence.int[4]),
-          "Interpretation of the lower limit:" = report$interpretation[1],
-          "Interpretation of the upper limit:" = report$interpretation[2],
-          check.names = FALSE))
+        if (!is.null(report$error) || length(report$limits) < 2L ||
+            !all(is.finite(report$limits[1:2]))) {
+          df <- t(data.frame(
+            "Sex and Age:" = paste0(converted_sex, " (", input$age_end[1], "-", input$age_end[2], ")"),
+            "Category:" = input$category,
+            "Status:" = if (!is.null(report$error)) "Error" else "No reference interval available",
+            "Error:" = if (!is.null(report$error)) report$error else NA_character_,
+            "Remarks:" = paste(report$remarks, collapse = " "),
+            "Warnings:" = if (length(report$warnings)) paste(report$warnings, collapse = " ") else "None",
+            check.names = FALSE))
+        } else {
+          df <- t(data.frame(
+            "Sex and Age:" = paste0(converted_sex, " (", input$age_end[1], "-", input$age_end[2], ")"),
+            "Category:" = input$category,
+            "Status:" = "OK",
+            "Remarks:" = paste(report$remarks, collapse = " "),
+            "Warnings:" = if (length(report$warnings)) paste(report$warnings, collapse = " ") else "None",
+            "Mean:" = report$stats[1],
+            "Standard deviation:" = report$stats[2],
+            "Lognormal Distribution:" = report$lognormal,
+            "Reference Interval:" = paste0(report$limits[1] , " - " , report$limits[2]),
+            "Lower tolerance intervals:" = paste0(report$limits[3], " - " , report$limits[4]),
+            "Upper tolerance intervals:" = paste0(report$limits[5], " - " , report$limits[6]),
+            "Target Limits:" = paste0(report$targets[1], " - " , report$targets[2]),
+            "Lower target tolerance intervals:" = paste0(report$targets[3], " - " , report$targets[4]),
+            "Upper target tolerance intervals:" = paste0(report$targets[5], " - " , report$targets[6]),
+            "Lower confidence intervals:" = paste0(report$confidence.int[1], " - " , report$confidence.int[2]),
+            "Upper confidence intervals:" = paste0(report$confidence.int[3], " - " , report$confidence.int[4]),
+            "Interpretation of the lower limit (EL):" = report$interpretation[1],
+            "Interpretation of the upper limit (EL):" = report$interpretation[2],
+            check.names = FALSE))
+        }
         
-        csv_path <- file.path(tmpdir, paste0(col, ".csv"))
+        colnames(df) <- col
+        csv_path <- file.path(tmpdir, csv_names[[col]])
         write.csv(df, csv_path)
         csv_files <- c(csv_files, csv_path)
       }
       
       old_wd <- setwd(tmpdir)
-      on.exit(setwd(old_wd))
+      on.exit(setwd(old_wd), add = TRUE, after = FALSE)
       
       zip(zipfile = file, files = basename(csv_files), extras = "-j")
     }
@@ -2011,17 +2100,18 @@ server <- function(input, output, session) {
       dat <- get_alldata_file()
 
       dataset <- dat[c(-1,-2,-3)]
-      reflim.loop.results <- reflim.loop(dataset, plot.it = FALSE)
+      reflim.loop.results <- reflim.loop(dataset, n.min = reflim_n_min, plot.it = FALSE)
       zlog.loop.results <- zlog.loop(dataset, reflim.loop.results)
 
-      result <- c(dat, zlog.loop.results)
+      result <- cbind(dat[1:3], zlog.loop.results)
       write.csv(result, file)
     }
   )
   
   output$tree_rpart <- renderPlot({ #Tab:rpart
     tree_fit <- build_rpart()
-    tree_formula <- paste(deparse(stats::formula(tree_fit)), collapse = " ")
+    tree_formula <- paste(parameter_display(), "~",
+                          paste(deparse(stats::formula(tree_fit)[[3]]), collapse = " "))
     rpart.plot::rpart.plot(
       tree_fit,
       box.palette = "RdBu",
