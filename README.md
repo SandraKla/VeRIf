@@ -47,7 +47,7 @@ These columns should be used for new data:
 * **Sex**:        For example "m" for male and "f" for female
 * **Value**:      Column name is the analyte name, values are the laboratory measures
 
-**File upload:** Choose a CSV or Excel (`.xlsx`) file with column headers. Columns may be in any order; include age, sex and at least one laboratory parameter. CSV files must use semicolons (`;`) between values and commas (`,`) for decimals. After upload, check the age and sex column assignments and map the female/male values. Files are used directly, without clicking **Submit**. Example files: [CSV template](https://github.com/SandraKla/VeRIf/tree/main/www/template.csv) and [Excel template](https://github.com/SandraKla/VeRIf/blob/main/www/template.xlsx).
+**File upload:** Choose a CSV or Excel (`.xls` or `.xlsx`) file with column headers. For Excel files with multiple worksheets, select the sheet to import. Columns may be in any order; include age, sex and at least one laboratory parameter. CSV files must use semicolons (`;`) between values and commas (`,`) for decimals. After upload, check the age and sex column assignments and map the female/male values. Files are used directly, without clicking **Submit**. Example files: [CSV template](https://github.com/SandraKla/VeRIf/tree/main/www/template.csv) and [Excel template](https://github.com/SandraKla/VeRIf/blob/main/www/template.xlsx).
 
 **Editable table:** Enable **Editable table** and enter or paste values into the existing `Category`, `Age`, `Sex` and `Analyte` columns. Use `f` for female and `m` for male; use one category for all rows if no grouping is needed. Click **Submit** after adding or changing data to apply it. Uncheck **Editable table** to return to the previously selected file or demo dataset, or to an empty input if neither was selected.
 
@@ -57,7 +57,7 @@ The left sidebar controls the laboratory parameter, category, sex and age range 
 
 The tabs provide the following functions:
 
-* **Input**: Upload a CSV or XLSX dataset, map the age and sex columns and the female/male values, or paste data into the editable table.
+* **Input**: Upload a CSV, XLS or XLSX dataset, map the age and sex columns and the female/male values, or paste data into the editable table.
 * **Overview**: Inspect the relationship between age, sex and the selected laboratory parameter.
 * **reflimR**: Estimate a reference interval or verify selected target values with the `reflim()` function. The plot can display equivalence limits (EL) or uncertainty margins (UM).
 * **refineR**: Perform a follow-up indirect reference interval estimation. The resulting limits can be selected in the sidebar and re-verified with *reflimR*.
@@ -67,7 +67,7 @@ The tabs provide the following functions:
 
 If a yellow or red bar appears while verifying target values with *reflimR*, a follow-up analysis with *refineR* is recommended. If the newly estimated limits produce green indicators when re-verified, this suggests that the original target values may be unsuitable. If one or more indicators remain yellow or red, the data may be too challenging for indirect methods; the *mclust* tab can help investigate this further.
 
-The results panel contains the detailed *reflimR* and *refineR* output. Tables can be copied, exported as CSV or PDF, or printed. **Download all Reference Intervals** creates a ZIP archive with results for all laboratory parameters, while **Download all zlog values** exports the corresponding values as CSV.
+The results panel contains the detailed *reflimR* and *refineR* output. **Download all Reference Intervals** creates a ZIP archive with results for all laboratory parameters, while **Download all zlog values** exports the corresponding values as CSV. 
 
 ## Contact
 

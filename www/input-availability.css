@@ -1,0 +1,46 @@
+.demo-data-callout {
+  padding: 14px 16px;
+  margin: 16px 0 22px;
+  background: #edf7ef;
+  border: 1px solid #b8d9bf;
+  border-left: 4px solid #39884b;
+  border-radius: 4px;
+}
+
+.demo-data-callout .help-block {
+  margin-bottom: 0;
+  color: #355d3e;
+}
+
+.demo-data-callout .btn-success {
+  color: #fff;
+  background-color: #39884b;
+  border-color: #30743f;
+}
+
+.demo-data-callout .btn-success:hover,
+.demo-data-callout .btn-success:focus {
+  background-color: #2e6f3d;
+}
+
+#downloads_unavailable[hidden] {
+  display: none;
+}
+
+/* Also cover the initial page before Shiny connects. */
+body:not(.verif-data-ready) #analysis_tab > li > a:not([data-value="Input"]):not([data-value="About"]),
+body:not(.verif-data-ready) #results_tab > li > a,
+#analysis_tab > li.disabled > a,
+#results_tab > li.disabled > a {
+  color: #777;
+  background: #f3f3f3;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.shiny-download-link[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  /* Keep the disabled explanation available on hover. */
+  pointer-events: auto;
+}

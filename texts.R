@@ -1,21 +1,27 @@
 ####################################### Texts #####################################################
+# Use Unicode escapes for non-ASCII characters so sourcing also works in the C locale.
 
 data_text <- HTML(paste0(
-  "Upload a CSV or Excel (.xlsx) file with column headers. CSV files must use semicolons (;) between values and commas (,) for decimals.", br(), br(),
-  "Include age in years, sex, and at least one laboratory parameter (use the analyte name as its column header). Columns may be in any order. After upload, check the age, sex and optional category column assignments and the female/male values. Select a category column to define groups, or None (all rows) to assign all rows to All.", br(), br(),
-  "Alternatively, enter or paste values into the editable table, or click Load demo data to explore the app with example data. No data are loaded automatically. Use the sidebar to select the laboratory parameter, category, sex and age range."
+  "Load demo data, upload your own file, or enter values in the editable table below. ",
+  "Analysis tabs become available once data are loaded. Then use the sidebar to select the laboratory analyte, category, sex and age range."
+))
+upload_data_text <- HTML(paste0(
+  "<strong>File requirements:</strong> Include column headers, age in years, sex and at least one laboratory analyte (use its name as the column header). Columns may be in any order. ",
+  "CSV files must use semicolons (;) between values and commas (,) for decimals.", br(),
+  "After upload, check the age, sex and optional category assignments and the female/male values. Choose None (all rows) if no category is needed. ",
+  "Uploaded files are applied automatically; Submit is only needed for the editable table."
 ))
 reflim_text <- HTML(paste0(
   "These tab displays the corresponding plot and the outputs of the reflim() function, providing an estimation of new reference intervals or a verification of the selected target values. 
   EL stands for equivalence limit. UM stands for uncertainty margin.
-  By clicking “Visualization of all plots across every process step”, all plots generated throughout the workflow can be displayed."
+  By clicking Visualization of all plots across every process step, all plots generated throughout the workflow can be displayed."
 ))
 refineR_text<- HTML(paste0(
   "If, during the verification with reflimR and its target values or own target values, a yellow or red bar appears, 
   a follow-up analysis using refineR is recommended. The resulting reference intervals from refineR can be used as new target values
-  and re-verified with reflimR. If all indicators turn green, this suggests that the manufacturer’s target values are likely incorrect. 
+  and re-verified with reflimR. If all indicators turn green, this suggests that the manufacturer\u2019s target values are likely incorrect.
   If one or more indicators remain yellow or red, the data are considered too challenging for indirect methods. This assumption can be further 
-  evaluated in the “mclust” tab using a Gaussian mixture model (mclust)."
+  evaluated in the mclust tab using a Gaussian mixture model (mclust)."
 ))
 mclust_text <- HTML(paste0(
   "Gaussian mixture modelling for the verification of reference intervals. ",
@@ -32,7 +38,7 @@ scatterplot_text <- HTML(paste0(
 ))
 zlog_text <- HTML(paste0(
   "zlog values are calculated from the dataset and the calculated reference intervals. The lower reference limits (LL) and upper reference limits (UL) can transform any result x into a zlog value using the following equation:
-  zlog(x) = (log(x)–(log(LL)+ log(UL))/2)*3.92/(log(UL)–log(LL)). Values ranging from –1.96 to 1.96 are considered normal, while values below –5 and above 5 indicate pathological conditions."
+  zlog(x) = (log(x)\u2013(log(LL)+ log(UL))/2)*3.92/(log(UL)\u2013log(LL)). Values ranging from \u20131.96 to 1.96 are considered normal, while values below \u20135 and above 5 indicate pathological conditions."
 ))
 rpart_text <- HTML(paste0(
   "Decision trees are used here to divide the data into subgroups based on age and sex. The method identifies groups with similar values, allowing more appropriate calculation of reference intervals. The tree is built using the rpart package and visualized with rpart.plot."
@@ -40,7 +46,7 @@ rpart_text <- HTML(paste0(
 about_text <- HTML(paste0(
   "<p>VeRIf is an interactive Shiny web application for the verification and evaluation of reference intervals based on routine laboratory data using the R package reflimR. The web application supports medical laboratories in efficiently, transparently, and data-driven reviewing existing reference intervals.</p>",
   br(), "<table class='table table-condensed' style='width: 100%; max-width: 900px;'>",
-  "<tr><td><strong>Version:</strong></td><td>1.0.5</td></tr>",
+  "<tr><td><strong>Version:</strong></td><td>1.0.6</td></tr>",
   "<tr><td><strong>Depends:</strong></td><td>R (&gt;= 4.5.2)</td></tr>",
   "<tr><td><strong>Imports:</strong></td><td>DT, mclust, refineR, reflimR, rhandsontable, readxl, rpart, rpart.plot, shiny, shinycssloaders, shinydashboard</td></tr>",
   "<tr><td><strong>Author:</strong></td><td>Sandra Klawitter</td></tr>",

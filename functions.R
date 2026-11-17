@@ -323,6 +323,13 @@ parse_numeric_values <- function(x) {
   suppressWarnings(as.numeric(values))
 }
 
+# Only enable result exports for a usable reference interval.
+has_valid_reference_limits <- function(report) {
+  limits <- report$limits
+  is.null(report$error) && is.numeric(limits) && length(limits) >= 2L &&
+    all(is.finite(limits[1:2])) && limits[1] > 0 && limits[2] > limits[1]
+}
+
 # Keep the original warnings with the report so the results table can show them.
 reflim_with_warnings <- function(...) {
   warnings <- character()

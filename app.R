@@ -187,6 +187,8 @@ ui <- dashboardPage(
   
   dashboardBody(
     tags$head(
+      tags$link(rel = "stylesheet", type = "text/css", href = "input-availability.css"),
+      tags$script(src = "input-availability.js"),
       tags$style(HTML("
         .shiny-input-disabled {
           opacity: 0.55;
@@ -264,12 +266,20 @@ ui <- dashboardPage(
                    status = "info",
                    width = 7,
                    
+                   h4("Input data"),
                    p(data_text),
+                   div(
+                     class = "demo-data-callout",
+                     actionButton("load_demo", "Load demo data", icon = icon("database"),
+                                  class = "btn-success"),
+                     helpText("Explore VeRIf with example data.")
+                   ),
                    
                    uiOutput("dataset_file"),
+                   helpText(upload_data_text),
                    uiOutput("upload_mapping_ui"),
                    actionButton('reset', 'Reset Input', icon = icon("trash")),
-                   actionButton("load_demo", "Load demo data", icon = icon("database")), br(),br(),
+                   helpText("Reset Input clears all data, settings and results."), hr(),
                    
                    fluidRow(
                      column(6, checkboxInput("show_table", tags$b("Editable table"), value = FALSE)),
@@ -327,7 +337,7 @@ ui <- dashboardPage(
                      
                      column(8, radioButtons(
                               "plot_type",
-                              "Select visualization:",
+                              "Select verification mode:",
                               choices = c(
                                 "Visualization with EL" = "pU",
                                 "Visualization with UM" = "VeRUS"
@@ -470,8 +480,12 @@ ui <- dashboardPage(
           tabPanel(
             "reflimR Results",
             withSpinner(DT::dataTableOutput("table_report")), hr(),
-            downloadButton("download_ritable", "Download all Reference Intervals"),
-            downloadButton("download_zlogtable", "Download all zlog values")
+            downloadButton("download_ritable", "Download all Reference Intervals",
+                           class = "disabled", `aria-disabled` = "true", tabindex = "-1"),
+            downloadButton("download_zlogtable", "Download all zlog values",
+                           class = "disabled", `aria-disabled` = "true", tabindex = "-1"),
+            helpText(id = "downloads_unavailable",
+                     "Downloads become available when reflimR has calculated a valid reference interval for the selected data.")
           ),
           tabPanel(
             "refineR Results",
@@ -535,8 +549,8 @@ server <- function(input, output, session) {
   output$dataset_file <- renderUI({
     input$reset ## Create a dependency with the reset button
     input$load_demo
-    fileInput('dataset_file1', label = 'Upload CSV or Excel (.xlsx)',
-              multiple = FALSE, accept = c('.csv', '.xlsx'), buttonLabel = 'Choose file')
+    fileInput('dataset_file1', label = 'Upload CSV or Excel (.xls, .xlsx)',
+              multiple = FALSE, accept = c('.csv', '.xls', '.xlsx'), buttonLabel = 'Choose file')
   })
 
   normalize_upload_value <- function(x) {
@@ -638,10 +652,10 @@ server <- function(input, output, session) {
   excel_sheets <- reactive({
     file_info <- dataset_input()
     req(file_info)
-    if (!grepl("\\.xlsx$", file_info$name, ignore.case = TRUE)) return(NULL)
+    if (!grepl("\\.xlsx?$", file_info$name, ignore.case = TRUE)) return(NULL)
     result <- tryCatch(readxl::excel_sheets(file_info$datapath), error = identity)
     validate(need(!inherits(result, "error"),
-                  "The Excel workbook could not be opened. Please upload a valid, unencrypted XLSX file."))
+                  "The Excel workbook could not be opened. Please upload a valid, unencrypted XLS or XLSX file."))
     result
   })
 
@@ -674,11 +688,11 @@ server <- function(input, output, session) {
     datapath <- file_info[["datapath"]]
     
     validate(need(
-      grepl("\\.(csv|xlsx)$", datapath, ignore.case = TRUE),
-      "Check if you have used the correct template! It must be a CSV or XLSX file!"
+      grepl("\\.(csv|xls|xlsx)$", file_info$name, ignore.case = TRUE),
+      "Please upload a CSV, XLS or XLSX file."
     ))
     
-    if (grepl("\\.csv$", datapath, ignore.case = TRUE)) {
+    if (grepl("\\.csv$", file_info$name, ignore.case = TRUE)) {
       dataset <- read.csv2(datapath)
     } else {
       sheets <- excel_sheets()
@@ -933,6 +947,28 @@ server <- function(input, output, session) {
     }
   })
 
+  # Blank tables and incomplete/invalid uploads must not unlock analysis tabs.
+  data_available <- reactive({
+    tryCatch({
+      dataset <- active_dataset()
+      if (is.null(dataset) || nrow(dataset) == 0L ||
+          !all(c("Category", "Age", "Sex") %in% names(dataset))) return(FALSE)
+      analytes <- setdiff(names(dataset), c("Category", "Age", "Sex"))
+      usable_rows <- is.finite(parse_numeric_values(dataset$Age)) &
+        dataset$Sex %in% c("f", "m")
+      any(vapply(dataset[analytes], function(values) {
+        any(usable_rows & is.finite(parse_numeric_values(values)))
+      }, logical(1)))
+    }, error = function(e) FALSE)
+  })
+
+  observe({
+    if (!data_available() && !is.null(input$analysis_tab) &&
+        !input$analysis_tab %in% c("Input", "About")) {
+      updateTabsetPanel(session, "analysis_tab", selected = "Input")
+    }
+  })
+
   parameter_label_value <- reactiveVal(NULL)
 
   observeEvent(input$parameter, {
@@ -1133,7 +1169,7 @@ server <- function(input, output, session) {
     }
   })
 
-  table_export_buttons <- function(result_type, export_columns = NULL) {
+  table_export_buttons <- function(result_type, export_columns = NULL, enabled = TRUE) {
     analyte <- gsub("[^[:alnum:]_-]+", "_", parameter_name())
     analyte <- gsub("^_+|_+$", "", analyte)
     if (length(analyte) == 0L || !nzchar(analyte)) analyte <- "Analyte"
@@ -1149,7 +1185,8 @@ server <- function(input, output, session) {
     }", jsonlite::toJSON(prefix, auto_unbox = TRUE)))
 
     lapply(c("copy", "csv", "pdf", "print"), function(button) {
-      config <- list(extend = button, filename = filename, title = filename)
+      config <- list(extend = button, filename = filename, title = filename,
+                     enabled = isTRUE(enabled))
       if (!is.null(export_columns)) {
         config$exportOptions <- list(columns = export_columns)
       }
@@ -1317,6 +1354,20 @@ server <- function(input, output, session) {
     
     return(report)
   })
+
+  downloads_available <- reactive({
+    if (!data_available()) return(FALSE)
+    # Validation failures (e.g. empty filters or too few values) disable exports
+    # without replacing the explanatory message in the results panel.
+    tryCatch(has_valid_reference_limits(get_data_report()), error = function(e) FALSE)
+  })
+
+  observe({
+    session$sendCustomMessage("setDataAvailability", list(
+      dataAvailable = data_available(),
+      downloadsAvailable = downloads_available()
+    ))
+  })
   
   fit_refineR <- eventReactive(list(
     data_source(),
@@ -1336,7 +1387,7 @@ server <- function(input, output, session) {
     input$upload_male_value
   ), {
     
-    withProgress(message = "RI calculation with refineR …", {
+    withProgress(message = "RI calculation with refineR \u2026", {
       
       dat <- refineR_data()
       fit <- findRI(Data = dat[, 4])
@@ -1678,7 +1729,8 @@ server <- function(input, output, session) {
     colnames(table_report) <- parameter_name
 
     DT::datatable(table_report, extensions = 'Buttons',
-                  options = list(dom = 'tB', pageLength = nrow(table_report), buttons = table_export_buttons("reflimR")))
+                  options = list(dom = 'tB', pageLength = nrow(table_report),
+                                 buttons = table_export_buttons("reflimR", enabled = has_valid_reference_limits(report))))
   })
    
   refineR_done <- reactiveVal(FALSE)
@@ -1735,7 +1787,8 @@ server <- function(input, output, session) {
     colnames(table_report) <- parameter_name
     
     DT::datatable(table_report, extensions = 'Buttons',
-                  options = list(dom = 'tB', pageLength = 15, buttons = table_export_buttons("refineR")))
+                  options = list(dom = 'tB', pageLength = 15,
+                                 buttons = table_export_buttons("refineR", enabled = has_valid_reference_limits(list(limits = table_refineR$PointEst)))))
   })
   
   mclust_plot_digits <- function(x) {
@@ -1833,7 +1886,7 @@ server <- function(input, output, session) {
 
     # Clear the previous count before validating and fitting the current data.
     update_mclust_cluster_label()
-    withProgress(message = "mclust Calculation …", {
+    withProgress(message = "mclust Calculation \u2026", {
       dat <- reflim_data()
       values <- mclust_plot_values(dat[, 4])
       n_cluster <- mclust_n_clusters()
@@ -1849,7 +1902,7 @@ server <- function(input, output, session) {
   
   output$plotmclustbic <- renderPlot({ #Tab:mclust
 
-    withProgress(message = "mclust Calculation …", {
+    withProgress(message = "mclust Calculation \u2026", {
       dat <- reflim_data()
       values <- mclust_plot_values(dat[, 4])
       plot_digits <- mclust_plot_digits(values)
@@ -2026,6 +2079,7 @@ server <- function(input, output, session) {
       paste("ReferenceIntervals_", Sys.Date(), ".zip", sep = "")
     },
     content = function(file) {
+      req(downloads_available())
       
       dat <- get_alldata_file()
       dataset <- dat[c(-1,-2,-3)]
@@ -2097,6 +2151,7 @@ server <- function(input, output, session) {
       paste("zlogValues_", Sys.Date(), ".csv", sep = "")
     },
     content = function(file) {
+      req(downloads_available())
       dat <- get_alldata_file()
 
       dataset <- dat[c(-1,-2,-3)]
